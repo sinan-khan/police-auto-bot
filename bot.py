@@ -6,32 +6,36 @@ from googleapiclient.http import MediaFileUpload
 from google.oauth2.credentials import Credentials
 
 def download_video():
-    urls = [
-        "https://archive.org/download/Cops.Compilation.1990s/Cops%20Compilation%201990s.mp4",
-        "https://archive.org/download/KansasCityPoliceFootage/Kansas%20City%20Police%20Footage.mp4",
-        "https://archive.org/download/PoliceDashCamCompilation2017/Police%20Dash%20Cam%20Compilation%202017.mp4"
-    ]
+    headers = {"Authorization": os.environ['PEXELS_KEY']}
+    queries = ["police car", "police officer", "law enforcement", "cop car"]
     
-    for url in urls:
+    for query in queries:
         try:
-            print(f"Trying: {url}")
-            r = requests.get(url, stream=True, timeout=60)
-            if r.status_code == 200:
-                with open("source.mp4", "wb") as f:
-                    for chunk in r.iter_content(chunk_size=1024*1024):
-                        f.write(chunk)
-                if os.path.getsize("source.mp4") > 5000000: # >5MB = real video
-                    info = {"title": "Police Footage Archive", "uploader": "Archive.org", "id": "archive"}
-                    with open('source_info.json', 'w') as f:
-                        json.dump(info, f)
-                    print("Download success")
-                    return True
-                else:
-                    print("File too small, trying next")
-            else:
-                print(f"HTTP {r.status_code}")
+            r = requests.get(f"https://api.pexels.com/videos/search?query={query}&per_page=15", headers=headers)
+            videos = r.json()['videos']
+            random.shuffle(videos)
+            
+            for vid in videos:
+                # Get 720p or lower MP4
+                video_files = [v for v in vid['video_files'] if v['height'] <= 720 and v['file_type'] == 'video/mp4']
+                if not video_files: continue
+                
+                video_url = video_files[0]['link']
+                print(f"Downloading: {vid['id']}")
+                
+                r = requests.get(video_url, stream=True, timeout=60)
+                if r.status_code == 200:
+                    with open("source.mp4", "wb") as f:
+                        for chunk in r.iter_content(chunk_size=1024*1024):
+                            f.write(chunk)
+                    if os.path.getsize("source.mp4") > 1000000:
+                        info = {"title": "Police Stock Footage", "uploader": "Pexels", "id": vid['id']}
+                        with open('source_info.json', 'w') as f:
+                            json.dump(info, f)
+                        print("Download success")
+                        return True
         except Exception as e:
-            print(f"Failed {url}: {e}")
+            print(f"Pexels search failed: {e}")
             continue
     return False
 
@@ -43,7 +47,7 @@ def make_short():
     x1 = max(0, (w - target_w) // 2)
     clip = clip.crop(x1=x1, x2=x1+target_w).resize(height=1920)
     
-    titles = ["SHOCKING POLICE STOP", "UNBELIEVABLE ARREST", "COPS CAUGHT THIS", "POLICE CHASE FOOTAGE"]
+    titles = ["POLICE ON PATROL", "COP CAR FOOTAGE", "LAW ENFORCEMENT", "POLICE ACTIVITY"]
     title = random.choice(titles)
     
     txt = TextClip(title, fontsize=110, color='white', font='Arial-Bold', stroke_color='black', stroke_width=6, method='caption', size=(1000, None))
@@ -66,7 +70,7 @@ def make_thumb():
     try: font = ImageFont.truetype("arialbd.ttf", 95)
     except: font = ImageFont.load_default()
     
-    text = "POLICE\nENCOUNTER"
+    text = "POLICE\nFOOTAGE"
     bbox = draw.multiline_textbbox((0,0), text, font=font)
     x = (1080 - (bbox[2]-bbox[0])) // 2
     y = 150
@@ -90,16 +94,13 @@ def upload():
     
     youtube = build('youtube', 'v3', credentials=creds)
     
-    with open('source_info.json', 'r') as f:
-        info = json.load(f)
-    
-    title = f"INSANE POLICE ENCOUNTER #shorts #police"
-    desc = f"Police bodycam footage. Source: Archive.org Public Domain\n\n#police #bodycam #cops #lawenforcement #shorts"
+    title = f"POLICE PATROL FOOTAGE #shorts #police"
+    desc = f"Law enforcement footage. Source: Pexels CC0 License\n\n#police #cops #lawenforcement #shorts"
     
     request = youtube.videos().insert(
         part="snippet,status",
         body={
-            "snippet": {"title": title, "description": desc, "tags": ["police","bodycam","shorts"], "categoryId": "25"},
+            "snippet": {"title": title, "description": desc, "tags": ["police","shorts","cops"], "categoryId": "25"},
             "status": {"privacyStatus": "public", "selfDeclaredMadeForKids": False}
         },
         media_body=MediaFileUpload("short.mp4", chunksize=-1, resumable=True)
