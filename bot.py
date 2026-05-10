@@ -41,46 +41,44 @@ def download_video():
 
 def make_short():
     if not os.path.exists("source.mp4"): return False
-    clip = VideoFileClip("source.mp4").subclip(0, min(58, VideoFileClip("source.mp4").duration))
+    
+    # Load video
+    clip = VideoFileClip("source.mp4")
+    duration = min(58, clip.duration)
+    clip = clip.subclip(0, duration)
+    
+    # Crop to 9:16 vertical
     w, h = clip.size
     target_w = int(h * 9 / 16)
     x1 = max(0, (w - target_w) // 2)
     clip = clip.crop(x1=x1, x2=x1+target_w).resize(height=1920)
     
+    # Create text overlay with PIL
     titles = ["POLICE ON PATROL", "COP CAR FOOTAGE", "LAW ENFORCEMENT", "POLICE ACTIVITY"]
     title = random.choice(titles)
     
-    # Save clip first, then add text with PIL
-    clip.write_videofile("temp.mp4", fps=30, codec="libx264", audio_codec="aac", threads=4, logger=None)
-    
-    # Add text using PIL + MoviePy
-    from moviepy.video.io.VideoFileClip import VideoFileClip
-    from moviepy.video.VideoClip import ImageClip
-    from moviepy.video.compositing.CompositeVideoClip import CompositeVideoClip
-    
-    video = VideoFileClip("temp.mp4")
-    
-    # Create text image with PIL
-    img = Image.new('RGBA', (1080, 200), (0,0,0,0))
+    img = Image.new('RGBA', (1080, 300), (0,0,0,0))
     draw = ImageDraw.Draw(img)
-    try: font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 90)
-    except: font = ImageFont.load_default()
+    try: 
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 90)
+    except: 
+        font = ImageFont.load_default()
     
-    # Text with black outline
-    x, y = 540, 100
-    for dx, dy in [(-4,-4),(-4,4),(4,-4),(4,4),(0,0)]:
-        color = "black" if dx != 0 or dy != 0 else "white"
-        draw.text((x+dx, y+dy), title, font=font, fill=color, anchor="mm")
+    # Black outline + white text
+    x, y = 540, 150
+    for dx, dy in [(-4,-4),(-4,4),(4,-4),(4,4)]:
+        draw.text((x+dx, y+dy), title, font=font, fill="black", anchor="mm")
+    draw.text((x, y), title, font=font, fill="white", anchor="mm")
     
     img.save("text.png")
-    text_clip = ImageClip("text.png").set_duration(video.duration).set_position(('center', 100))
+    text_clip = ImageClip("text.png").set_duration(clip.duration).set_position(('center', 100))
     
-    final = CompositeVideoClip([video, text_clip])
+    # Composite final video
+    final = CompositeVideoClip([clip, text_clip])
     final.write_videofile("short.mp4", fps=30, codec="libx264", audio_codec="aac", threads=4, logger=None)
     
     # Cleanup
-    os.remove("temp.mp4")
-    os.remove("text.png")
+    if os.path.exists("text.png"): os.remove("text.png")
     return True
 
 def make_thumb():
