@@ -102,13 +102,10 @@ def upload():
     token_info = json.loads(os.environ['YT_TOKEN'])
     client_data = json.loads(os.environ['CLIENT_SECRET'])
     
-    # Handle both "web" and "installed" credential types
     if 'web' in client_data:
         client_info = client_data['web']
     elif 'installed' in client_data:
         client_info = client_data['installed']
-    else:
-        raise Exception("CLIENT_SECRET must contain 'web' or 'installed' key")
     
     creds = Credentials(
         token_info['token'],
@@ -133,11 +130,15 @@ def upload():
     )
     response = request.execute()
     vid_id = response['id']
-    
-    if os.path.exists("thumb.jpg"):
-        youtube.thumbnails().set(videoId=vid_id, media_body=MediaFileUpload("thumb.jpg")).execute()
-    
     print(f"Uploaded as: https://youtube.com/shorts/{vid_id}")
+    
+    # Try thumbnail, ignore if no permission
+    if os.path.exists("thumb.jpg"):
+        try:
+            youtube.thumbnails().set(videoId=vid_id, media_body=MediaFileUpload("thumb.jpg")).execute()
+            print("Thumbnail set")
+        except Exception as e:
+            print(f"Thumbnail skipped - verify phone at youtube.com/verify"))
 
 if __name__ == "__main__":
     if download_video():
