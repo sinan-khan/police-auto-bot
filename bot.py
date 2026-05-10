@@ -50,11 +50,37 @@ def make_short():
     titles = ["POLICE ON PATROL", "COP CAR FOOTAGE", "LAW ENFORCEMENT", "POLICE ACTIVITY"]
     title = random.choice(titles)
     
-    txt = TextClip(title, fontsize=110, color='white', font='Arial-Bold', stroke_color='black', stroke_width=6, method='caption', size=(1000, None))
-    txt = txt.set_position(('center', 100)).set_duration(clip.duration)
+    # Save clip first, then add text with PIL
+    clip.write_videofile("temp.mp4", fps=30, codec="libx264", audio_codec="aac", threads=4, logger=None)
     
-    final = CompositeVideoClip([clip, txt])
+    # Add text using PIL + MoviePy
+    from moviepy.video.io.VideoFileClip import VideoFileClip
+    from moviepy.video.VideoClip import ImageClip
+    from moviepy.video.compositing.CompositeVideoClip import CompositeVideoClip
+    
+    video = VideoFileClip("temp.mp4")
+    
+    # Create text image with PIL
+    img = Image.new('RGBA', (1080, 200), (0,0,0,0))
+    draw = ImageDraw.Draw(img)
+    try: font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 90)
+    except: font = ImageFont.load_default()
+    
+    # Text with black outline
+    x, y = 540, 100
+    for dx, dy in [(-4,-4),(-4,4),(4,-4),(4,4),(0,0)]:
+        color = "black" if dx != 0 or dy != 0 else "white"
+        draw.text((x+dx, y+dy), title, font=font, fill=color, anchor="mm")
+    
+    img.save("text.png")
+    text_clip = ImageClip("text.png").set_duration(video.duration).set_position(('center', 100))
+    
+    final = CompositeVideoClip([video, text_clip])
     final.write_videofile("short.mp4", fps=30, codec="libx264", audio_codec="aac", threads=4, logger=None)
+    
+    # Cleanup
+    os.remove("temp.mp4")
+    os.remove("text.png")
     return True
 
 def make_thumb():
