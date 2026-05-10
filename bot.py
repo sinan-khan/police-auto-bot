@@ -100,7 +100,16 @@ def upload():
     if not os.path.exists("short.mp4"): return
     
     token_info = json.loads(os.environ['YT_TOKEN'])
-    client_info = json.loads(os.environ['CLIENT_SECRET'])['web']
+    client_data = json.loads(os.environ['CLIENT_SECRET'])
+    
+    # Handle both "web" and "installed" credential types
+    if 'web' in client_data:
+        client_info = client_data['web']
+    elif 'installed' in client_data:
+        client_info = client_data['installed']
+    else:
+        raise Exception("CLIENT_SECRET must contain 'web' or 'installed' key")
+    
     creds = Credentials(
         token_info['token'],
         refresh_token=token_info['refresh_token'],
