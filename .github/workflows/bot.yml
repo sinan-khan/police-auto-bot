@@ -1,33 +1,29 @@
 name: Auto Police Shorts Bot
+
 on:
-  workflow_dispatch:
   schedule:
-    - cron: '0 5,13 * * *' # 10:00 AM + 6:00 PM Pakistan time
+    - cron: '0 9,21 * * *'  # 2pm & 2am Pakistan time
+  workflow_dispatch:
 
 jobs:
   upload-shorts:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
       
-      - uses: actions/setup-python@v5
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-          
-      - name: Install system packages
+      
+      - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg
-          
-      - name: Install Python packages
-        run: |
-          python -m pip install --upgrade pip
           pip install yt-dlp moviepy==1.0.3 google-api-python-client google-auth-oauthlib google-auth-httplib2 requests Pillow==9.5.0
-          
-         - name: Run bot
-     env:
-       PEXELS_KEY: ${{ secrets.PEXELS_KEY }}
-       YT_TOKEN: ${{ secrets.YT_TOKEN }}
-       CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
-     run: python bot.py
+      
+      - name: Run bot
+        env:
+          PEXELS_KEY: ${{ secrets.PEXELS_KEY }}
+          YT_TOKEN: ${{ secrets.YT_TOKEN }}
+          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+        run: python bot.py
