@@ -25,8 +25,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install yt-dlp moviepy==1.0.3 google-api-python-client google-auth-oauthlib google-auth-httplib2 requests Pillow==9.5.0
           
-      - name: Run bot
-        env:
-          YT_TOKEN: ${{ secrets.YT_TOKEN }}
-          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
-        run: python bot.py
+         - name: Run bot
+     env:
+       PEXELS_KEY: ${{ secrets.PEXELS_KEY }}
+       YT_TOKEN: ${{ secrets.YT_TOKEN }}
+       CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+     run: python bot.py
