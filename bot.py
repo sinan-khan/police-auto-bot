@@ -6,29 +6,30 @@ from googleapiclient.http import MediaFileUpload
 from google.oauth2.credentials import Credentials
 
 def download_video():
-    # Archive.org direct MP4 links - all public domain police footage
     urls = [
-        "https://archive.org/download/bodycam_202106/bodycam.mp4",
-        "https://archive.org/download/police_encounter_2020/police_encounter.mp4", 
-        "https://archive.org/download/dashcam-police-chase-2019/dashcam.mp4",
-        "https://archive.org/download/law-enforcement-footage-collection/LawEnforcement01.mp4"
+        "https://archive.org/download/Cops.Compilation.1990s/Cops%20Compilation%201990s.mp4",
+        "https://archive.org/download/KansasCityPoliceFootage/Kansas%20City%20Police%20Footage.mp4",
+        "https://archive.org/download/PoliceDashCamCompilation2017/Police%20Dash%20Cam%20Compilation%202017.mp4"
     ]
     
     for url in urls:
         try:
             print(f"Trying: {url}")
-            r = requests.get(url, stream=True, timeout=30)
+            r = requests.get(url, stream=True, timeout=60)
             if r.status_code == 200:
                 with open("source.mp4", "wb") as f:
                     for chunk in r.iter_content(chunk_size=1024*1024):
                         f.write(chunk)
-                if os.path.getsize("source.mp4") > 1000000: # >1MB = real video
-                    # Create fake info.json for credits
-                    info = {"title": "Police Bodycam Footage", "uploader": "Archive.org", "id": "archive"}
+                if os.path.getsize("source.mp4") > 5000000: # >5MB = real video
+                    info = {"title": "Police Footage Archive", "uploader": "Archive.org", "id": "archive"}
                     with open('source_info.json', 'w') as f:
                         json.dump(info, f)
                     print("Download success")
                     return True
+                else:
+                    print("File too small, trying next")
+            else:
+                print(f"HTTP {r.status_code}")
         except Exception as e:
             print(f"Failed {url}: {e}")
             continue
