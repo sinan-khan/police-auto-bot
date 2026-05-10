@@ -1,5 +1,5 @@
 import os, json, random, requests
-from moviepy.editor import VideoFileClip, TextClip, CompositeVideoClip
+from moviepy.editor import VideoFileClip, ImageClip, CompositeVideoClip
 from PIL import Image, ImageDraw, ImageFont
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
@@ -16,7 +16,6 @@ def download_video():
             random.shuffle(videos)
             
             for vid in videos:
-                # Get 720p or lower MP4
                 video_files = [v for v in vid['video_files'] if v['height'] <= 720 and v['file_type'] == 'video/mp4']
                 if not video_files: continue
                 
@@ -42,18 +41,15 @@ def download_video():
 def make_short():
     if not os.path.exists("source.mp4"): return False
     
-    # Load video
     clip = VideoFileClip("source.mp4")
     duration = min(58, clip.duration)
     clip = clip.subclip(0, duration)
     
-    # Crop to 9:16 vertical
     w, h = clip.size
     target_w = int(h * 9 / 16)
     x1 = max(0, (w - target_w) // 2)
     clip = clip.crop(x1=x1, x2=x1+target_w).resize(height=1920)
     
-    # Create text overlay with PIL
     titles = ["POLICE ON PATROL", "COP CAR FOOTAGE", "LAW ENFORCEMENT", "POLICE ACTIVITY"]
     title = random.choice(titles)
     
@@ -64,7 +60,6 @@ def make_short():
     except: 
         font = ImageFont.load_default()
     
-    # Black outline + white text
     x, y = 540, 150
     for dx, dy in [(-4,-4),(-4,4),(4,-4),(4,4)]:
         draw.text((x+dx, y+dy), title, font=font, fill="black", anchor="mm")
@@ -73,11 +68,9 @@ def make_short():
     img.save("text.png")
     text_clip = ImageClip("text.png").set_duration(clip.duration).set_position(('center', 100))
     
-    # Composite final video
     final = CompositeVideoClip([clip, text_clip])
     final.write_videofile("short.mp4", fps=30, codec="libx264", audio_codec="aac", threads=4, logger=None)
     
-    # Cleanup
     if os.path.exists("text.png"): os.remove("text.png")
     return True
 
@@ -91,7 +84,7 @@ def make_thumb():
     img = img.crop((x1, 0, x1+target_w, h)).resize((1080, 1920))
     
     draw = ImageDraw.Draw(img)
-    try: font = ImageFont.truetype("arialbd.ttf", 95)
+    try: font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 95)
     except: font = ImageFont.load_default()
     
     text = "POLICE\nFOOTAGE"
@@ -139,8 +132,8 @@ def upload():
 
 if __name__ == "__main__":
     if download_video():
-        make_short()
-        make_thumb() 
-        upload()
+        if make_short():
+            make_thumb() 
+            upload()
     else:
         print("No video found")
