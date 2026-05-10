@@ -1,7 +1,5 @@
 name: Auto Police Shorts Bot
 on:
-  schedule:
-    - cron: '0 5,13 * * *' # 10:00 AM + 6:00 PM Pakistan time
   workflow_dispatch:
 
 jobs:
@@ -9,8 +7,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
+      - uses: actions/checkout@v4
+      - name: Show all files
+        run: |
+          echo "Current folder:"
+          pwd
+          echo "--- Files in repo ---"
+          ls -la
+          echo "--- Content of bot.py ---"
+          cat bot.py
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
       - name: Install tools
