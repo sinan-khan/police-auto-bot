@@ -6,27 +6,38 @@ from googleapiclient.http import MediaFileUpload
 from google.oauth2.credentials import Credentials
 
 def download_video():
-    search = "police bodycam creativecommons OR public domain"
-    ydl_opts = {
-        'format': 'best[height<=720][ext=mp4]',
-        'outtmpl': 'source.%(ext)s',
-        'playlist_items': '1',
-        'default_search': 'ytsearch',
-        'quiet': True,
-        'writesubtitles': True,
-        'writeautomaticsub': True,
-        'subtitleslangs': ['en'],
-        'match_filter': lambda info: info.get('duration') and 180 < info['duration'] < 1800,
-        'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
-        'http_headers': {'User-Agent': 'com.google.android.youtube/17.31.35 (Linux; U; Android 11) gzip'},
-        'no_check_certificate': True,
-        'geo_bypass': True
-    }
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(search, download=True)
-        with open('source_info.json', 'w') as f:
-            json.dump(info, f)
-    return os.path.exists("source.mp4") or os.path.exists("source.mkv") or os.path.exists("source.webm")
+    searches = [
+        "police bodycam footage no copyright",
+        "law enforcement dashcam public domain", 
+        "police chase creative commons",
+        "cop cam footage free to use"
+    ]
+    
+    for search in searches:
+        try:
+            ydl_opts = {
+                'format': 'best[height<=720][ext=mp4]',
+                'outtmpl': 'source.%(ext)s',
+                'playlist_items': '1',
+                'default_search': 'ytsearch',
+                'quiet': True,
+                'extractor_args': {'youtube': {'player_client': ['android', 'ios', 'web']}},
+                'http_headers': {'User-Agent': 'com.google.android.youtube/17.31.35 (Linux; U; Android 11) gzip'},
+                'no_check_certificate': True,
+                'geo_bypass': True,
+                'match_filter': lambda info: info.get('duration') and 60 < info['duration'] < 1800,
+            }
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(search, download=True)
+                with open('source_info.json', 'w') as f:
+                    json.dump(info, f)
+                if os.path.exists("source.mp4") or os.path.exists("source.mkv") or os.path.exists("source.webm"):
+                    print(f"Downloaded using search: {search}")
+                    return True
+        except Exception as e:
+            print(f"Search failed: {search} - {e}")
+            continue
+    return False
 
 def get_video_file():
     for ext in ['mp4', 'mkv', 'webm']:
