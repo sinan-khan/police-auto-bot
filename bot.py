@@ -35,13 +35,14 @@ def download_video(url, video_id):
     "-o", output_path,
     "--no-playlist",
     "--cookies", "cookies.txt",
-    "--extractor-args", "youtube:player_client=mweb,web",
+    "--extractor-args", "youtube:player_client=mweb,web;po_token=mweb.gvs+auto",
     "--user-agent", "Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36",
     "--sleep-requests", "3",
     "--sleep-interval", "5",
     "--max-sleep-interval", "10",
     "--no-check-certificates",
     "--force-ipv4",
+    "--geo-bypass-country", "PK",
     url
 ]
     
