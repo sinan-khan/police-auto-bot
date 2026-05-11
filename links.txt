@@ -1,3 +1,2 @@
 # Add YouTube URLs here, one per line
-https://youtu.be/FO9zuIWRm0A?si=H0KdtLfMoZAXpmDm
-https://www.youtube.com/watch?v=6aKGQV3hF4A
+https://www.youtube.com/watch?v=jNQXAC9IVRw
