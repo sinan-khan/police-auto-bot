@@ -30,19 +30,20 @@ def get_links():
 def download_video(url, video_id):
     output_path = os.path.join(TEMP_DOWNLOAD_DIR, f"video_{video_id}.mp4")
     cmd = [
-        "yt-dlp",
-        "-f", "best[height<=720][ext=mp4]/best[ext=mp4]/best",
-        "-o", output_path,
-        "--no-playlist",
-        "--cookies", "cookies.txt",
-        "--extractor-args", "youtube:player_client=tv_embedded,android",
-        "--user-agent", "com.google.android.youtube/19.09.37(Linux; U; Android 11) gzip",
-        "--sleep-requests", "2",
-        "--sleep-interval", "3",
-        "--max-sleep-interval", "8",
-        "--no-check-certificates",
-        url
-    ]
+    "yt-dlp",
+    "-f", "best[height<=720][ext=mp4]/best[ext=mp4]/best",
+    "-o", output_path,
+    "--no-playlist",
+    "--cookies", "cookies.txt",
+    "--extractor-args", "youtube:player_client=mweb,web",
+    "--user-agent", "Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36",
+    "--sleep-requests", "3",
+    "--sleep-interval", "5",
+    "--max-sleep-interval", "10",
+    "--no-check-certificates",
+    "--force-ipv4",
+    url
+]
     
     result = subprocess.run(cmd, capture_output=True, text=True)
     print("STDOUT:", result.stdout)
