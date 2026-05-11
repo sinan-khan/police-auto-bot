@@ -1,0 +1,2 @@
+# Add Seattle PD YouTube URLs here, one per line
+# Example: https://www.youtube.com/watch?v=abc123
