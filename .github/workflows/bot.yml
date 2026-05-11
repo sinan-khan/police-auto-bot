@@ -22,11 +22,12 @@ jobs:
         with:
           python-version: '3.10'
       
-      - name: Install deps
+            - name: Install deps
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg
-          pip install moviepy==1.0.3 pillow google-api-python-client google-auth-oauthlib yt-dlp
+          pip install -U "yt-dlp[default]"
+          pip install moviepy==1.0.3 pillow google-api-python-client google-auth-oauthlib
       
       - name: Run bot
         env:
