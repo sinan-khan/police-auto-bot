@@ -26,19 +26,16 @@ def download_video(url):
     output_path = f"{TEMP_FOLDER}/video_%(id)s.%(ext)s"
     
         cmd = [
-        "yt-dlp",
-        "-f", "best[height<=720][ext=mp4]/best[ext=mp4]/best",
-        "-o", output_path,
-        "--no-playlist",
-        "--cookies", "cookies.txt",
-        "--extractor-args", "youtube:player_client=tv_embedded,android",
-        "--user-agent", "com.google.android.youtube/19.09.37(Linux; U; Android 11) gzip",
-        "--sleep-requests", "2",
-        "--sleep-interval", "3",
-        "--max-sleep-interval", "8",
-        "--no-check-certificates",
-        url
-    ]
+    "yt-dlp",
+    "-f", "best[height<=720][ext=mp4]/best[ext=mp4]/best",
+    "-o", output_path,
+    "--no-playlist",
+    "--cookies", "cookies.txt",
+    "--extractor-args", "youtube:player_client=tv_embedded,android",
+    "--user-agent", "com.google.android.youtube/19.09.37(Linux; U; Android 11) gzip",
+    "--sleep-requests", "2",
+    url
+]
     
     print(f"Running yt-dlp on: {url}")
     result = subprocess.run(cmd, capture_output=True, text=True)
