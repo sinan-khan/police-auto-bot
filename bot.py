@@ -149,15 +149,27 @@ if __name__ == "__main__":
         queue = load_queue()
         processed_urls = {item['source_url'] for item in queue['pending'] + queue['uploaded']}
         
+        for url in urls:        processed_urls = []
         for url in urls:
             if url not in processed_urls:
                 video_path = download_video(url)
                 if video_path:
                     split_video_to_queue(video_path, url)
+                    processed_urls.append(url) # Add this line
+                else:
+                    print(f"Failed to download: {url}")
+            if url not in processed_urls:
+                video_path = download_video(url)
+                if video_path:
+                    split_video_to_queue(video_path, url)
         
-        # Clear links.txt after processing
-        with open(LINKS_FILE, 'w') as f:
-            f.write("# Add YouTube URLs here, one per line\n")
+                # Only clear links.txt if we successfully processed at least 1 video
+        if processed_urls:
+            with open(LINKS_FILE, 'w') as f:
+                f.write("# Add YouTube URLs here, one per line\n")
+            print("Cleared links.txt after successful processing")
+        else:
+            print("No videos processed. links.txt unchanged for retry.")
         
         print("Splitting complete. Queue updated.")
         exit()
