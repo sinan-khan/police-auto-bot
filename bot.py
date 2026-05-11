@@ -25,17 +25,36 @@ def download_video(url):
     os.makedirs(TEMP_FOLDER, exist_ok=True)
     output_path = f"{TEMP_FOLDER}/video_%(id)s.%(ext)s"
     
-        cmd = [
-    "yt-dlp",
-    "-f", "best[height<=720][ext=mp4]/best[ext=mp4]/best",
-    "-o", output_path,
-    "--no-playlist",
-    "--cookies", "cookies.txt",
-    "--extractor-args", "youtube:player_client=tv_embedded,android",
-    "--user-agent", "com.google.android.youtube/19.09.37(Linux; U; Android 11) gzip",
-    "--sleep-requests", "2",
-    url
-]
+        def download_video(url, video_id):
+    output_path = os.path.join(TEMP_DOWNLOAD_DIR, f"video_{video_id}.mp4")
+    cmd = [
+        "yt-dlp",
+        "-f", "best[height<=720][ext=mp4]/best[ext=mp4]/best",
+        "-o", output_path,
+        "--no-playlist",
+        "--cookies", "cookies.txt",
+        "--extractor-args", "youtube:player_client=tv_embedded,android",
+        "--user-agent", "com.google.android.youtube/19.09.37(Linux; U; Android 11) gzip",
+        "--sleep-requests", "2",
+        "--sleep-interval", "3",
+        "--max-sleep-interval", "8",
+        "--no-check-certificates",
+        url
+    ]
+    
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    print("STDOUT:", result.stdout)
+    print("STDERR:", result.stderr)
+    
+    if result.returncode != 0:
+        print(f"Download failed with code {result.returncode}")
+        return None
+        
+    if os.path.exists(output_path):
+        return output_path
+    else:
+        print("File not found after download")
+        return None
     
     print(f"Running yt-dlp on: {url}")
     result = subprocess.run(cmd, capture_output=True, text=True)
