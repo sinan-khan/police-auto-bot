@@ -30,7 +30,7 @@ def download_video(url):
         "-f", "best[height<=720][ext=mp4]/best[ext=mp4]/best",
         "-o", output_path,
         "--no-playlist",
-        "--extractor-args", "youtube:player_client=web",
+        "--extractor-args", "youtube:player_client=android",
         "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         url
     ]
