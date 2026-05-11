@@ -23,25 +23,31 @@ def save_queue(queue):
 def download_video(url):
     """Download video from YouTube using yt-dlp"""
     os.makedirs(TEMP_FOLDER, exist_ok=True)
-    output_path = f"{TEMP_FOLDER}/%(title)s.%(ext)s"
+    output_path = f"{TEMP_FOLDER}/video_%(id)s.%(ext)s"
     
     cmd = [
         "yt-dlp",
-        "-f", "best[height<=720][ext=mp4]", # 720p max to save space
+        "-f", "best[height<=720][ext=mp4]/best[ext=mp4]/best",
         "-o", output_path,
         "--no-playlist",
+        "--extractor-args", "youtube:player_client=web",
+        "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         url
     ]
     
-    print(f"Downloading: {url}")
+    print(f"Running yt-dlp on: {url}")
     result = subprocess.run(cmd, capture_output=True, text=True)
     
+    print("STDOUT:", result.stdout)
+    if result.stderr:
+        print("STDERR:", result.stderr)
+    
     if result.returncode!= 0:
-        print(f"Download failed: {result.stderr}")
+        print(f"Download failed with code {result.returncode}")
         return None
     
-    # Find downloaded file
     files = glob.glob(f"{TEMP_FOLDER}/*.mp4")
+    print(f"Found files: {files}")
     return files[0] if files else None
 
 def split_video_to_queue(filepath, source_url):
