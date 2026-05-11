@@ -25,15 +25,18 @@ def download_video(url):
     os.makedirs(TEMP_FOLDER, exist_ok=True)
     output_path = f"{TEMP_FOLDER}/video_%(id)s.%(ext)s"
     
-    cmd = [
+        cmd = [
         "yt-dlp",
         "-f", "best[height<=720][ext=mp4]/best[ext=mp4]/best",
         "-o", output_path,
         "--no-playlist",
         "--cookies", "cookies.txt",
-        "--extractor-args", "youtube:player_client=ios",
-        "--user-agent", "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15",
-        "--sleep-requests", "1",
+        "--extractor-args", "youtube:player_client=tv_embedded,android",
+        "--user-agent", "com.google.android.youtube/19.09.37(Linux; U; Android 11) gzip",
+        "--sleep-requests", "2",
+        "--sleep-interval", "3",
+        "--max-sleep-interval", "8",
+        "--no-check-certificates",
         url
     ]
     
