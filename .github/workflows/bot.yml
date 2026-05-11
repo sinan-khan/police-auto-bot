@@ -1,29 +1,39 @@
-name: Auto Police Shorts Bot
+name: Seattle PD Shorts Bot
 
 on:
   schedule:
-    - cron: '0 9,21 * * *'  # 2pm & 2am Pakistan time
+    - cron: '0 8,20 * * *'
   workflow_dispatch:
 
 jobs:
-  upload-shorts:
+  bot:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
       
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
       
-      - name: Install dependencies
+      - name: Install deps
         run: |
-          pip install yt-dlp moviepy==1.0.3 google-api-python-client google-auth-oauthlib google-auth-httplib2 requests Pillow==9.5.0
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          pip install moviepy==1.0.3 pillow google-api-python-client google-auth-oauthlib
       
       - name: Run bot
         env:
-          PEXELS_KEY: ${{ secrets.PEXELS_KEY }}
           YT_TOKEN: ${{ secrets.YT_TOKEN }}
           CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
         run: python bot.py
+      
+      - name: Commit queue changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "Bot"
+          git add upload_queue.json
+          git diff --staged --quiet || git commit -m "Update queue"
+          git push
+        continue-on-error: true
