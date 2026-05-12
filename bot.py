@@ -1,99 +1,116 @@
-import os
-import subprocess
-import json
-from moviepy.editor import VideoFileClip
+import os, json, subprocess
+from pathlib import Path
+from datetime import datetime
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
+from google.oauth2.credentials import Credentials
+import pytz
 
-TEMP_DOWNLOAD_DIR = "temp_downloads"
-LINKS_FILE = "links.txt"
-QUEUE_FILE = "queue.json"
-OUTPUT_DIR = "output_videos"
+VIDEOS_DIR = Path("videos")
+CLIPS_DIR = Path("clips")
+QUEUE_FILE = Path("queue.json")
+SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
+PK_TZ = pytz.timezone("Asia/Karachi")
+POST_TIMES_PK = ["18:00", "03:00"] # 6PM PKT = 9AM EST, 3AM PKT = 6PM EST
 
-os.makedirs(TEMP_DOWNLOAD_DIR, exist_ok=True)
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+def get_youtube_service():
+    creds = Credentials.from_authorized_user_file("token.json", SCOPES)
+    return build("youtube", "v3", credentials=creds)
+
+def edit_for_copyright(input_path, output_path):
+    cmd = [
+        "ffmpeg", "-i", str(input_path),
+        "-vf", "hflip,scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2",
+        "-af", "atempo=1.02",
+        "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+        "-c:a", "aac", "-y", str(output_path)
+    ]
+    subprocess.run(cmd, check=True)
+
+def split_and_edit(video_path):
+    CLIPS_DIR.mkdir(exist_ok=True)
+    temp_dir = Path("temp")
+    temp_dir.mkdir(exist_ok=True)
+
+    split_pattern = temp_dir / f"{video_path.stem}_temp_%03d.mp4"
+    subprocess.run([
+        "ffmpeg", "-i", str(video_path),
+        "-c", "copy", "-map", "0", "-segment_time", "59",
+        "-f", "segment", "-reset_timestamps", "1", str(split_pattern)
+    ], check=True)
+
+    for temp_clip in sorted(temp_dir.glob("*.mp4")):
+        final_clip = CLIPS_DIR / f"{video_path.stem}_edit_{temp_clip.stem[-3:]}.mp4"
+        edit_for_copyright(temp_clip, final_clip)
+        temp_clip.unlink()
+
+    temp_dir.rmdir()
+    video_path.unlink()
+
+def generate_metadata(filename):
+    num = filename.split("_edit_")[-1].replace(".mp4","")
+    base = filename.split("_edit_")[0].replace("_"," ")
+    title = f"{base} Bodycam Part {num} | Police Footage"
+    desc = f"""Seattle PD bodycam footage for news & educational purposes.
+Full video source: Public records.
+
+#police #bodycam #seattle #news"""
+    tags = ["police", "bodycam", "seattle pd", "cop", "news", "law enforcement"]
+    return title, desc, tags
 
 def load_queue():
-    if os.path.exists(QUEUE_FILE):
-        with open(QUEUE_FILE, 'r') as f:
-            return json.load(f)
-    return {"videos": [], "current": 0}
+    if QUEUE_FILE.exists():
+        return json.loads(QUEUE_FILE.read_text())
+    return {"processed": [], "posted": []}
 
-def save_queue(queue):
-    with open(QUEUE_FILE, 'w') as f:
-        json.dump(queue, f, indent=2)
+def save_queue(q):
+    QUEUE_FILE.write_text(json.dumps(q, indent=2))
 
-def get_links():
-    if not os.path.exists(LINKS_FILE):
-        return []
-    with open(LINKS_FILE, 'r') as f:
-        return [line.strip() for line in f if line.strip()]
+def should_post_now():
+    now_pk = datetime.now(PK_TZ)
+    return now_pk.strftime("%H:%M") in POST_TIMES_PK
 
-def download_video(url, video_id):
-    output_path = os.path.join(TEMP_DOWNLOAD_DIR, f"video_{video_id}.mp4")
-    cmd = [
-    "yt-dlp",
-    "-f", "best[height<=360][ext=mp4]/best[ext=mp4]/best",
-    "-o", output_path,
-    "--no-playlist",
-    "--extractor-args", "youtube:player_client=tv;po_token=tv.gvs+auto",
-    "--user-agent", "Mozilla/5.0",
-    "--sleep-requests", "2",
-    "--no-check-certificates",
-    "--force-ipv4",
-    "--geo-bypass-country", "PK",
-    url
-]
-    
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    print("STDOUT:", result.stdout)
-    print("STDERR:", result.stderr)
-    
-    if result.returncode!= 0:
-        print(f"Download failed with code {result.returncode}")
-        return None
-        
-    if os.path.exists(output_path):
-        return output_path
-    else:
-        print("File not found after download")
-        return None
-
-def split_video(input_path, video_id):
-    clip = VideoFileClip(input_path)
-    duration = clip.duration
-    part = 1
-    
-    for start in range(0, int(duration), 60):
-        end = min(start + 60, duration)
-        if end - start < 10:
-            continue
-            
-        subclip = clip.subclip(start, end)
-        output_file = os.path.join(OUTPUT_DIR, f"{video_id}_part{part}.mp4")
-        subclip.write_videofile(output_file, codec="libx264", audio_codec="aac", verbose=False, logger=None)
-        print(f"Saved: {output_file}")
-        part += 1
-    
-    clip.close()
+def upload_next_clip(youtube):
+    q = load_queue()
+    pending = [c for c in sorted(CLIPS_DIR.glob("*.mp4")) if str(c) not in q["posted"]]
+    if not pending:
+        print("Queue empty")
+        return
+    clip = pending[0]
+    title, desc, tags = generate_metadata(clip.name)
+    print(f"Uploading {clip.name}")
+    request = youtube.videos().insert(
+        part="snippet,status",
+        body={
+            "snippet": {"title": title, "description": desc, "tags": tags, "categoryId": "25"},
+            "status": {"privacyStatus": "public", "selfDeclaredMadeForKids": False}
+        },
+        media_body=MediaFileUpload(str(clip))
+    )
+    response = request.execute()
+    print(f"Uploaded: https://youtube.com/watch?v={response['id']}")
+    q["posted"].append(str(clip))
+    save_queue(q)
+    clip.unlink()
 
 def main():
-    links = get_links()
-    if not links:
-        print("No links found in links.txt")
-        return
-    
-    for link in links:
-        print(f"Running yt-dlp on: {link}")
-        video_id = link.split("v=")[-1].split("&")[0]
-        video_path = download_video(link, video_id)
-        
-        if video_path:
-            print(f"Found files: ['{video_path}']")
-            split_video(video_path, video_id)
-            os.remove(video_path)
-        else:
-            print(f"Failed to download: {link}")
-    
-    print("Splitting complete. Queue updated")
+    VIDEOS_DIR.mkdir(exist_ok=True)
+    CLIPS_DIR.mkdir(exist_ok=True)
+    q = load_queue()
+
+    for video_file in VIDEOS_DIR.glob("*.mp4"):
+        if str(video_file) not in q["processed"]:
+            print(f"Processing: {video_file.name}")
+            split_and_edit(video_file)
+            q["processed"].append(str(video_file))
+            save_queue(q)
+            break
+
+    if should_post_now():
+        yt = get_youtube_service()
+        upload_next_clip(yt)
+    else:
+        print(f"Not post time. Current PK: {datetime.now(PK_TZ).strftime('%H:%M')}")
 
 if __name__ == "__main__":
     main()
