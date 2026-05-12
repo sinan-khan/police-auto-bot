@@ -1,46 +1,33 @@
-name: Seattle PD Shorts Bot
+name: Auto YouTube Bot
 
 on:
   schedule:
-    - cron: '0 8,20 * * *'
+    - cron: '0 13,22 * * *' # 13:00 UTC = 6PM PKT, 22:00 UTC = 3AM PKT
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 jobs:
-  bot:
+  run:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v5
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-      
+      - uses: actions/checkout@v4
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
-      
+          python-version: '3.11'
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - name: Install deps
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg nodejs
-          pip install -U --force-reinstall "yt-dlp[default] @ git+https://github.com/yt-dlp/yt-dlp.git@master"
-          pip install moviepy==1.0.3 pillow google-api-python-client google-auth-oauthlib yt-dlp-youtube-oauth2
-      
+        run: pip install -r requirements.txt
       - name: Run bot
         env:
           YT_TOKEN: ${{ secrets.YT_TOKEN }}
-          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
-          GITHUB_EVENT_NAME: ${{ github.event_name }}
-        run: python bot.py
-      
-      - name: Commit queue changes
         run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "Bot"
-          git add upload_queue.json links.txt
-          git diff --staged --quiet || git commit -m "Update queue"
+          echo "$YT_TOKEN" > token.json
+          python bot.py
+      - name: Commit state
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add clips/ queue.json videos/
+          git diff --staged --quiet || git commit -m "Bot run $(date -u)"
           git push
-        continue-on-error: true
