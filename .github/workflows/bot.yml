@@ -1,33 +1,32 @@
-name: Auto YouTube Bot
+name: Upload Shorts
 
 on:
   schedule:
-    - cron: '0 13,22 * * *' # 13:00 UTC = 6PM PKT, 22:00 UTC = 3AM PKT
+    - cron: 0 0 *   # 5:00 AM PKT
+    - cron: 0 3 *   # 8:00 AM PKT
   workflow_dispatch:
 
 jobs:
-  run:
+  upload:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-      - name: Install ffmpeg
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
-      - name: Install deps
-        run: pip install -r requirements.txt
-      - name: Run bot
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install gdown google-api-python-client google-auth-httplib2 google-auth-oauthlib
+          sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Create token.json
+        run: echo "$YT_TOKEN" > token.json
         env:
           YT_TOKEN: ${{ secrets.YT_TOKEN }}
-        run: |
-          echo "$YT_TOKEN" > token.json
-          python bot.py
-      - name: Commit state
-        run: |
-          git config user.name github-actions
-          git config user.email github-actions@github.com
-          git add clips/ queue.json videos/ || true
-          git diff --staged --quiet || git commit -m "Bot run $(date -u)"
-          git push
+
+      - name: Run bot
+        run: python bot.py
