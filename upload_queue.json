@@ -1,0 +1,24 @@
+{
+  "pending_clips": [
+    {
+      "source_video_hash": "3857227456344f688a3ffda6cbb61c38",
+      "source_video_path": "temp_videos/1778666372/video_1AoGJqfLbUJ6KaHPEyR6UrjEN9LIkjbsm.mp4",
+      "source_video_name": "video_1AoGJqfLbUJ6KaHPEyR6UrjEN9LIkjbsm",
+      "clip_index": 3,
+      "start_time": 547.3194625472811,
+      "duration": 28.24510037897919,
+      "end_time": 575.5645629262602
+    },
+    {
+      "source_video_hash": "3857227456344f688a3ffda6cbb61c38",
+      "source_video_path": "temp_videos/1778666372/video_1AoGJqfLbUJ6KaHPEyR6UrjEN9LIkjbsm.mp4",
+      "source_video_name": "video_1AoGJqfLbUJ6KaHPEyR6UrjEN9LIkjbsm",
+      "clip_index": 4,
+      "start_time": 606.8143593530588,
+      "duration": 38.08115744050434,
+      "end_time": 644.895516793563
+    }
+  ],
+  "uploaded_clips": [],
+  "next_part_number": 3
+}
