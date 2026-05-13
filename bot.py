@@ -29,18 +29,19 @@ for d in [TEMP_DIR, PROCESSED_DIR, OUTPUT_DIR]:
     Path(d).mkdir(exist_ok=True)
 
 # Queue files
-QUEUE_FILE = "upload_queue.json"      # Main queue of all clips
-PROCESSED_VIDEOS_FILE = "processed_videos.json"  # Track which videos we've already processed
+QUEUE_FILE = "upload_queue.json"
+PROCESSED_VIDEOS_FILE = "processed_videos.json"
 
 def load_queue():
     """Load the upload queue (persists across runs)"""
     if os.path.exists(QUEUE_FILE):
         with open(QUEUE_FILE, "r") as f:
             return json.load(f)
+    # Initialize with correct structure
     return {
-        "pending_clips": [],      # List of clips waiting to be uploaded
-        "uploaded_clips": [],     # List of already uploaded clips with metadata
-        "next_part_number": 1     # Next part number to use
+        "pending_clips": [],
+        "uploaded_clips": [],
+        "next_part_number": 1
     }
 
 def save_queue(queue):
@@ -60,13 +61,16 @@ def save_processed_videos(processed_set):
 
 def get_video_hash(video_path):
     """Create a unique hash for a video file to avoid reprocessing"""
-    with open(video_path, 'rb') as f:
-        # Read first 1MB and last 1MB for fast hashing
-        f.seek(0)
-        head = f.read(1024 * 1024)
-        f.seek(-1024 * 1024, os.SEEK_END)
-        tail = f.read(1024 * 1024)
-        return hashlib.md5(head + tail).hexdigest()
+    try:
+        with open(video_path, 'rb') as f:
+            # Read first 1MB and last 1MB for fast hashing
+            f.seek(0)
+            head = f.read(1024 * 1024)
+            f.seek(-1024 * 1024, os.SEEK_END)
+            tail = f.read(1024 * 1024)
+            return hashlib.md5(head + tail).hexdigest()
+    except:
+        return hashlib.md5(str(datetime.now()).encode()).hexdigest()
 
 def get_video_duration(video_path):
     cmd = ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", video_path]
@@ -85,26 +89,39 @@ def get_video_resolution(video_path):
     return width, height
 
 def download_from_drive(link):
+    """Download videos from Google Drive - FIXED without fuzzy parameter"""
     print(f"📥 Downloading from: {link[:80]}...")
     temp_subdir = os.path.join(TEMP_DIR, str(int(datetime.now().timestamp())))
     Path(temp_subdir).mkdir(exist_ok=True)
+    
     try:
-        if "folder" in link or "drive/folders" in link:
-            gdown.download_folder(link, output=temp_subdir, quiet=False, use_cookies=False)
+        # Extract file ID from link
+        if "file/d/" in link:
+            # Single file
+            file_id = link.split("file/d/")[1].split("/")[0].split("?")[0]
+            output_path = os.path.join(temp_subdir, f"video_{file_id}.mp4")
+            gdown.download(id=file_id, output=output_path, quiet=False)
+        elif "folders" in link:
+            # Folder
+            folder_id = link.split("folders/")[1].split("?")[0]
+            gdown.download_folder(id=folder_id, output=temp_subdir, quiet=False)
         else:
-            gdown.download(link, output=temp_subdir, fuzzy=True, quiet=False, use_cookies=False)
+            print(f"⚠️ Could not parse link: {link}")
+            return []
     except Exception as e:
         print(f"⚠️ Download error: {e}")
         return []
+    
     video_files = []
-    for ext in ['*.mp4', '*.mov', '*.avi', '*.mkv', '*.MP4']:
+    for ext in ['*.mp4', '*.mov', '*.avi', '*.mkv', '*.MP4', '*.webm']:
         video_files.extend(glob.glob(f"{temp_subdir}/**/{ext}", recursive=True))
         video_files.extend(glob.glob(f"{temp_subdir}/{ext}"))
+    
     print(f"✅ Downloaded {len(video_files)} video files")
     return video_files
 
 def split_video_to_clips(video_path, video_hash):
-    """Split video into clips and return list of clip paths"""
+    """Split video into clips and return list of clip info"""
     duration = get_video_duration(video_path)
     print(f"  📹 Duration: {duration:.1f}s")
     
@@ -140,6 +157,7 @@ def split_video_to_clips(video_path, video_hash):
         # Store clip info (not actual file yet - we'll generate on demand)
         clip_info = {
             "source_video_hash": video_hash,
+            "source_video_path": video_path,
             "source_video_name": video_name,
             "clip_index": i + 1,
             "start_time": start_time,
@@ -151,12 +169,12 @@ def split_video_to_clips(video_path, video_hash):
     
     return clips
 
-def generate_clip_file(clip_info, source_video_path, part_number):
+def generate_clip_file(clip_info, part_number):
     """Generate the actual video file from clip info (when ready to upload)"""
     output_path = f"{PROCESSED_DIR}/clip_{part_number}.mp4"
     
     cmd = [
-        "ffmpeg", "-i", source_video_path,
+        "ffmpeg", "-i", clip_info["source_video_path"],
         "-ss", str(clip_info["start_time"]),
         "-t", str(clip_info["duration"]),
         "-c", "copy",
@@ -216,6 +234,7 @@ def convert_to_shorts_format(input_video, output_video, part_number, clip_durati
         return False
 
 def generate_metadata(part_number):
+    """Generate SEO-friendly title, description, tags"""
     title = f"🚨 Seattle PD Bodycam - PART #{part_number} #Shorts"
     description = f"""🔴 SEATTLE POLICE BODYCAM FOOTAGE - PART #{part_number}
 
@@ -239,7 +258,7 @@ def get_authenticated_service():
             creds.refresh(Request())
         else:
             if not os.path.exists("client_secrets.json"):
-                raise Exception("client_secrets.json not found!")
+                raise Exception("client_secrets.json not found! Add YT_CLIENT_SECRETS secret.")
             flow = InstalledAppFlow.from_client_secrets_file("client_secrets.json", SCOPES)
             creds = flow.run_local_server(port=0)
         with open("token.json", "w") as token:
@@ -317,7 +336,6 @@ def process_new_videos():
         if clips:
             # Add to queue
             for clip in clips:
-                clip["source_video_path"] = video_path  # Store path for later generation
                 queue["pending_clips"].append(clip)
             
             new_clips_added += len(clips)
@@ -364,12 +382,12 @@ def upload_daily_videos():
         print(f"\n📹 Processing Part #{part_num}")
         
         # Step 1: Generate the raw clip from source video
-        source_path = clip_info["source_video_path"]
-        if not os.path.exists(source_path):
+        source_path = clip_info.get("source_video_path")
+        if not source_path or not os.path.exists(source_path):
             print(f"  ❌ Source video missing: {source_path}")
             continue
         
-        raw_clip = generate_clip_file(clip_info, source_path, part_num)
+        raw_clip = generate_clip_file(clip_info, part_num)
         if not raw_clip:
             continue
         
@@ -419,6 +437,10 @@ def main():
     print("\n" + "🎬" * 30)
     print("SEATTLE PD YOUTUBE SHORTS BOT - PERSISTENT QUEUE SYSTEM")
     print("🎬" * 30)
+    
+    # Initialize queue files if they don't exist
+    load_queue()
+    load_processed_videos()
     
     # Step 1: Process any new videos (adds clips to queue)
     process_new_videos()
