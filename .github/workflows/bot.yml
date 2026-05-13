@@ -2,12 +2,12 @@ name: Upload YouTube Shorts
 
 on:
   schedule:
-    - cron: "0 5 * * *"   # 10:00 AM PKT
-    - cron: "0 11 * * *"  # 4:00 PM PKT
-  workflow_dispatch:
+    - cron: "0 5 * * *"   # 10:00 AM PKT - UPLOAD ONLY
+    - cron: "0 11 * * *"  # 4:00 PM PKT - UPLOAD ONLY
+  workflow_dispatch:  # Keep this! Manual runs = Download ONLY
 
 jobs:
-  upload:
+  run-bot:
     runs-on: ubuntu-latest
     timeout-minutes: 120
 
@@ -34,16 +34,7 @@ jobs:
       - name: Run bot
         run: python bot.py
       
-      - name: Upload queue files as artifacts (SAVE PROGRESS)
-        uses: actions/upload-artifact@v4
-        with:
-          name: queue-files
-          path: |
-            upload_queue.json
-            processed_videos.json
-          retention-days: 90
-      
-      - name: Commit and push queue files back to repo
+      - name: Commit and push queue files
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
