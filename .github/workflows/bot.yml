@@ -1,32 +1,18 @@
 name: Upload Shorts
-
 on:
   schedule:
-    - cron: 0 0 *   # 5:00 AM PKT
-    - cron: 0 3 *   # 8:00 AM PKT
+    - cron: "0 0 * * *"   # 5:00 AM PKT (assuming UTC+5)
+    - cron: "0 3 * * *"   # 8:00 AM PKT (assuming UTC+5)
   workflow_dispatch:
 
 jobs:
   upload:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
-      - name: Install dependencies
-        run: |
-          pip install gdown google-api-python-client google-auth-httplib2 google-auth-oauthlib
-          sudo apt-get update && sudo apt-get install -y ffmpeg
-
-      - name: Create token.json
-        run: echo "$YT_TOKEN" > token.json
-        env:
-          YT_TOKEN: ${{ secrets.YT_TOKEN }}
-
-      - name: Run bot
-        run: python bot.py
+      - run: pip install gdown google-api-python-client google-auth-httplib2 google-auth-oauthlib
+      - run: echo '${{ secrets.YT_TOKEN }}' > token.json
+      - run: python bot.py
