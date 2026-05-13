@@ -36,7 +36,16 @@ def load_queue():
     """Load the upload queue (persists across runs)"""
     if os.path.exists(QUEUE_FILE):
         with open(QUEUE_FILE, "r") as f:
-            return json.load(f)
+            queue = json.load(f)
+            # Ensure all required keys exist
+            if "pending_clips" not in queue:
+                queue["pending_clips"] = []
+            if "uploaded_clips" not in queue:
+                queue["uploaded_clips"] = []
+            if "next_part_number" not in queue:
+                queue["next_part_number"] = 1
+            save_queue(queue)  # Save the fixed structure
+            return queue
     # Initialize with correct structure
     return {
         "pending_clips": [],
@@ -52,7 +61,10 @@ def load_processed_videos():
     """Track which source videos have already been processed into clips"""
     if os.path.exists(PROCESSED_VIDEOS_FILE):
         with open(PROCESSED_VIDEOS_FILE, "r") as f:
-            return set(json.load(f))
+            data = json.load(f)
+            if isinstance(data, list):
+                return set(data)
+            return set()
     return set()
 
 def save_processed_videos(processed_set):
@@ -89,20 +101,17 @@ def get_video_resolution(video_path):
     return width, height
 
 def download_from_drive(link):
-    """Download videos from Google Drive - FIXED without fuzzy parameter"""
+    """Download videos from Google Drive"""
     print(f"📥 Downloading from: {link[:80]}...")
     temp_subdir = os.path.join(TEMP_DIR, str(int(datetime.now().timestamp())))
     Path(temp_subdir).mkdir(exist_ok=True)
     
     try:
-        # Extract file ID from link
         if "file/d/" in link:
-            # Single file
             file_id = link.split("file/d/")[1].split("/")[0].split("?")[0]
             output_path = os.path.join(temp_subdir, f"video_{file_id}.mp4")
             gdown.download(id=file_id, output=output_path, quiet=False)
         elif "folders" in link:
-            # Folder
             folder_id = link.split("folders/")[1].split("?")[0]
             gdown.download_folder(id=folder_id, output=temp_subdir, quiet=False)
         else:
@@ -129,7 +138,6 @@ def split_video_to_clips(video_path, video_hash):
         print(f"  ⚠️ Too short, skipping")
         return []
     
-    # Determine number of clips to make
     max_clips = min(20, int(duration / 15))
     num_clips = random.randint(3, min(10, max_clips))
     
@@ -154,7 +162,6 @@ def split_video_to_clips(video_path, video_hash):
         end_time = min(start_time + clip_duration, duration)
         used_ranges.append((start_time, end_time))
         
-        # Store clip info (not actual file yet - we'll generate on demand)
         clip_info = {
             "source_video_hash": video_hash,
             "source_video_path": video_path,
@@ -170,7 +177,7 @@ def split_video_to_clips(video_path, video_hash):
     return clips
 
 def generate_clip_file(clip_info, part_number):
-    """Generate the actual video file from clip info (when ready to upload)"""
+    """Generate the actual video file from clip info"""
     output_path = f"{PROCESSED_DIR}/clip_{part_number}.mp4"
     
     cmd = [
@@ -258,7 +265,8 @@ def get_authenticated_service():
             creds.refresh(Request())
         else:
             if not os.path.exists("client_secrets.json"):
-                raise Exception("client_secrets.json not found! Add YT_CLIENT_SECRETS secret.")
+                print("⚠️ WARNING: client_secrets.json not found! YouTube upload will fail.")
+                return None
             flow = InstalledAppFlow.from_client_secrets_file("client_secrets.json", SCOPES)
             creds = flow.run_local_server(port=0)
         with open("token.json", "w") as token:
@@ -267,6 +275,9 @@ def get_authenticated_service():
 
 def upload_to_youtube(video_path, title, description, tags):
     youtube = get_authenticated_service()
+    if not youtube:
+        return None
+    
     body = {
         "snippet": {"title": title[:100], "description": description[:5000], "tags": tags[:500], "categoryId": "22"},
         "status": {"privacyStatus": "public", "selfDeclaredMadeForKids": False}
@@ -290,7 +301,6 @@ def process_new_videos():
     print("📋 STEP 1: Checking for new videos to process")
     print("=" * 60)
     
-    # Load tracking data
     queue = load_queue()
     processed_videos = load_processed_videos()
     
@@ -306,7 +316,6 @@ def process_new_videos():
     
     print(f"📁 Found {len(drive_links)} Drive link(s)")
     
-    # Download new videos
     all_new_videos = []
     for link in drive_links:
         videos = download_from_drive(link)
@@ -318,7 +327,6 @@ def process_new_videos():
     
     print(f"\n📦 Downloaded {len(all_new_videos)} video(s)")
     
-    # Process only NEW videos (not processed before)
     new_clips_added = 0
     
     for video_path in all_new_videos:
@@ -329,22 +337,17 @@ def process_new_videos():
             continue
         
         print(f"\n🎬 NEW VIDEO: {Path(video_path).name}")
-        
-        # Split into clips
         clips = split_video_to_clips(video_path, video_hash)
         
         if clips:
-            # Add to queue
             for clip in clips:
                 queue["pending_clips"].append(clip)
-            
             new_clips_added += len(clips)
             processed_videos.add(video_hash)
             print(f"   ✅ Added {len(clips)} clips to upload queue")
         else:
             print(f"   ⚠️ No clips generated")
     
-    # Save updated data
     save_queue(queue)
     save_processed_videos(processed_videos)
     
@@ -366,12 +369,10 @@ def upload_daily_videos():
         print("✅ No pending clips to upload!")
         return False
     
-    # Calculate next part number
     next_part = queue["next_part_number"]
     print(f"📊 Next Part number: #{next_part}")
     print(f"📊 Pending clips: {len(queue['pending_clips'])}")
     
-    # Upload today's videos (max VIDEOS_PER_DAY)
     today_uploads = min(VIDEOS_PER_DAY, len(queue["pending_clips"]))
     print(f"\n🚀 Uploading {today_uploads} Short(s) today...")
     
@@ -381,7 +382,6 @@ def upload_daily_videos():
         
         print(f"\n📹 Processing Part #{part_num}")
         
-        # Step 1: Generate the raw clip from source video
         source_path = clip_info.get("source_video_path")
         if not source_path or not os.path.exists(source_path):
             print(f"  ❌ Source video missing: {source_path}")
@@ -391,22 +391,18 @@ def upload_daily_videos():
         if not raw_clip:
             continue
         
-        # Step 2: Convert to Shorts format
         final_video = f"{OUTPUT_DIR}/shorts_part_{part_num}.mp4"
         clip_duration = clip_info["duration"]
         
         if not convert_to_shorts_format(raw_clip, final_video, part_num, clip_duration):
             continue
         
-        # Step 3: Generate metadata
         title, description, tags = generate_metadata(part_num)
         print(f"   Title: {title}")
         
-        # Step 4: Upload
         video_id = upload_to_youtube(final_video, title, description, tags)
         
         if video_id:
-            # Move from pending to uploaded
             queue["uploaded_clips"].append({
                 "part_number": part_num,
                 "video_id": video_id,
@@ -414,15 +410,11 @@ def upload_daily_videos():
                 "uploaded_at": datetime.now().isoformat()
             })
             
-            # Cleanup temp files
             if os.path.exists(raw_clip):
                 os.remove(raw_clip)
     
-    # Remove uploaded clips from pending queue
     queue["pending_clips"] = queue["pending_clips"][today_uploads:]
     queue["next_part_number"] = next_part + today_uploads
-    
-    # Save updated queue
     save_queue(queue)
     
     print("\n" + "=" * 60)
@@ -438,14 +430,11 @@ def main():
     print("SEATTLE PD YOUTUBE SHORTS BOT - PERSISTENT QUEUE SYSTEM")
     print("🎬" * 30)
     
-    # Initialize queue files if they don't exist
+    # Initialize queue files
     load_queue()
     load_processed_videos()
     
-    # Step 1: Process any new videos (adds clips to queue)
     process_new_videos()
-    
-    # Step 2: Upload today's scheduled videos (2 per day)
     upload_daily_videos()
     
     print("\n" + "=" * 60)
