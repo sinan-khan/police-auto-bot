@@ -40,13 +40,22 @@ def download_from_drive():
         print(f"Drive download failed: {e}")
         return False
 
-def edit_for_copyright(input_path, output_path):
+def edit_for_copyright(input_path, output_path, part_num):
+    filters = (
+        "hflip,"
+        "scale=1280:720:force_original_aspect_ratio=decrease,"
+        "pad=1280:720:(ow-iw)/2:(oh-ih)/2,"
+        "drawtext=text='Part\\#{}':fontcolor=white:fontsize=48:"
+        "box=1:boxcolor=black@0.5:boxborderw=10:x=50:y=50"
+    ).format(part_num)
+
     cmd = [
         "ffmpeg", "-i", str(input_path),
-        "-vf", "hflip,scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2",
-        "-af", "atempo=1.02",
+        "-vf", filters,
+        "-af", "atempo=1.15",
         "-c:v", "libx264", "-preset", "fast", "-crf", "23",
-        "-c:a", "aac", "-y", str(output_path)
+        "-c:a", "aac", "-b:a", "128k",
+        "-y", str(output_path)
     ]
     subprocess.run(cmd, check=True)
 
@@ -64,7 +73,8 @@ def split_and_edit(video_path):
 
     for temp_clip in sorted(temp_dir.glob("*.mp4")):
         final_clip = CLIPS_DIR / f"{video_path.stem}_edit_{temp_clip.stem[-3:]}.mp4"
-        edit_for_copyright(temp_clip, final_clip)
+        part_num = int(temp_clip.stem[-3:]) + 1
+edit_for_copyright(temp_clip, final_clip, part_num)
         temp_clip.unlink()
 
     temp_dir.rmdir()
