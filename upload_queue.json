@@ -80,6 +80,51 @@
       "start_time": 193.84033472816208,
       "duration": 37.06970687947051,
       "end_time": 230.9100416076326
+    },
+    {
+      "source_video_hash": "fd48198183c77a9f9389b68915c7b0cc",
+      "source_video_path": "temp_videos/1778669145/video_1-hvvcq5ELq2egpjPUbqElFHy03UzFfTi.mp4",
+      "source_video_name": "video_1-hvvcq5ELq2egpjPUbqElFHy03UzFfTi",
+      "clip_index": 1,
+      "start_time": 562.5200862913914,
+      "duration": 26.851938420472884,
+      "end_time": 589.3720247118642
+    },
+    {
+      "source_video_hash": "fd48198183c77a9f9389b68915c7b0cc",
+      "source_video_path": "temp_videos/1778669145/video_1-hvvcq5ELq2egpjPUbqElFHy03UzFfTi.mp4",
+      "source_video_name": "video_1-hvvcq5ELq2egpjPUbqElFHy03UzFfTi",
+      "clip_index": 2,
+      "start_time": 142.75331438732397,
+      "duration": 38.9420149392599,
+      "end_time": 181.69532932658387
+    },
+    {
+      "source_video_hash": "fd48198183c77a9f9389b68915c7b0cc",
+      "source_video_path": "temp_videos/1778669145/video_1-hvvcq5ELq2egpjPUbqElFHy03UzFfTi.mp4",
+      "source_video_name": "video_1-hvvcq5ELq2egpjPUbqElFHy03UzFfTi",
+      "clip_index": 3,
+      "start_time": 18.20500389633826,
+      "duration": 49.68557979792742,
+      "end_time": 67.89058369426567
+    },
+    {
+      "source_video_hash": "fd48198183c77a9f9389b68915c7b0cc",
+      "source_video_path": "temp_videos/1778669145/video_1-hvvcq5ELq2egpjPUbqElFHy03UzFfTi.mp4",
+      "source_video_name": "video_1-hvvcq5ELq2egpjPUbqElFHy03UzFfTi",
+      "clip_index": 4,
+      "start_time": 234.75543131861068,
+      "duration": 30.93041469556892,
+      "end_time": 265.6858460141796
+    },
+    {
+      "source_video_hash": "fd48198183c77a9f9389b68915c7b0cc",
+      "source_video_path": "temp_videos/1778669145/video_1-hvvcq5ELq2egpjPUbqElFHy03UzFfTi.mp4",
+      "source_video_name": "video_1-hvvcq5ELq2egpjPUbqElFHy03UzFfTi",
+      "clip_index": 5,
+      "start_time": 173.01915186709925,
+      "duration": 32.35740433667239,
+      "end_time": 205.37655620377166
     }
   ],
   "uploaded_clips": [],
