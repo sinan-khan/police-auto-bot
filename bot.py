@@ -7,7 +7,6 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
-# Settings
 CLIP_DURATION = 59
 SPEED = 1.15
 SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
@@ -18,6 +17,8 @@ def get_duration(path):
          "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
         capture_output=True, text=True
     )
+    if not result.stdout.strip():
+        raise ValueError(f"ffprobe failed. File might be empty or corrupted: {path}")
     return float(result.stdout.strip())
 
 def edit_for_copyright(input_path, output_path, part_num):
@@ -26,7 +27,7 @@ def edit_for_copyright(input_path, output_path, part_num):
         "scale=1280:720:force_original_aspect_ratio=decrease,"
         "pad=1280:720:(ow-iw)/2:(oh-ih)/2,"
         "drawtext=text='Part\\#{}':fontcolor=white:fontsize=48:"
-        "box=1:boxcolor=black@0.5:boxborderw=10:x=50:y=50:x=(w-text_w)/2:y=h-100"
+        "box=1:boxcolor=black@0.5:boxborderw=10:x=50:y=50"
     ).format(part_num)
 
     cmd = [
@@ -51,13 +52,11 @@ def split_and_edit(input_path, output_dir):
         temp_clip = output_dir / f"{base}_temp_{i:03d}.mp4"
         final_clip = output_dir / f"{base}_edit_{i:03d}.mp4"
         
-        # Cut clip
         subprocess.run([
             "ffmpeg", "-y", "-ss", str(start), "-to", str(end),
             "-i", input_path, "-c", "copy", str(temp_clip)
         ], check=True)
         
-        # Edit for copyright + add Part#
         part_num = i + 1
         edit_for_copyright(temp_clip, final_clip, part_num)
         clips.append(final_clip)
@@ -70,14 +69,10 @@ def generate_viral_title(base_title, part_num):
         "You WON'T BELIEVE This {} 😱",
         "This {} Changed Everything 🔥",
         "Nobody Expected This {} Part#{}",
-        "Wait For It... {} Part#{} 😮",
-        "The CRAZIEST {} You'll See Today"
+        "Wait For It... {} Part#{} 😮"
     ]
     hook = random.choice(hooks)
-    if "Part#{}" in hook:
-        title = hook.format(base_title, part_num)
-    else:
-        title = hook.format(base_title)
+    title = hook.format(base_title, part_num) if "Part#{}" in hook else hook.format(base_title)
     return title[:100]
 
 def generate_description(base_title, part_num):
@@ -117,11 +112,29 @@ def upload_video(file_path, title, description, tags):
     ).execute()
     print(f"Uploaded: https://youtu.be/{response['id']}")
 
+def download_with_gdown(link, output_file):
+    # Extract file ID from Google Drive link
+    match = re.search(r'/d/([a-zA-Z0-9_-]+)', link)
+    if match:
+        file_id = match.group(1)
+        direct_link = f"https://drive.google.com/uc?id={file_id}"
+    else:
+        direct_link = link
+    
+    print(f"Downloading from: {direct_link}")
+    result = subprocess.run(["gdown", "--fuzzy", direct_link, "-O", output_file], capture_output=True, text=True)
+    
+    if result.returncode != 0:
+        print(result.stderr)
+        raise Exception("gdown failed to download file")
+    
+    if os.path.getsize(output_file) < 1000000:  # Less than 1MB = probably failed
+        raise Exception("Downloaded file too small. Check if Drive link is public.")
+
 def main():
     Path("clips").mkdir(exist_ok=True)
     Path("temp").mkdir(exist_ok=True)
     
-    # Read link and title from drive_links.txt
     with open("drive_links.txt") as f:
         line = f.readline().strip()
         if " | " in line:
@@ -130,12 +143,9 @@ def main():
             link = line
             base_title = "Video"
     
-    # Download video with gdown
     input_file = "input.mp4"
-    print(f"Downloading {link}...")
-    subprocess.run(["gdown", link, "-O", input_file], check=True)
+    download_with_gdown(link, input_file)
     
-    # Split, edit, and upload
     clips = split_and_edit(input_file, Path("clips"))
     
     for i, clip in enumerate(clips):
@@ -143,7 +153,6 @@ def main():
         title = generate_viral_title(base_title, part_num)
         description = generate_description(base_title, part_num)
         tags = generate_tags(base_title)
-        print(f"Uploading {title}...")
         upload_video(clip, title, description, tags)
 
 if __name__ == "__main__":
