@@ -17,6 +17,69 @@
       "start_time": 606.8143593530588,
       "duration": 38.08115744050434,
       "end_time": 644.895516793563
+    },
+    {
+      "source_video_hash": "81ef734c9b08989f43da2f908aa3edba",
+      "source_video_path": "temp_videos/1778667917/video_1X8BTMHvVm9DSVv96pxgtoofAk9DXUR0S.mp4",
+      "source_video_name": "video_1X8BTMHvVm9DSVv96pxgtoofAk9DXUR0S",
+      "clip_index": 1,
+      "start_time": 150.46453359890506,
+      "duration": 35.77413615871201,
+      "end_time": 186.23866975761706
+    },
+    {
+      "source_video_hash": "81ef734c9b08989f43da2f908aa3edba",
+      "source_video_path": "temp_videos/1778667917/video_1X8BTMHvVm9DSVv96pxgtoofAk9DXUR0S.mp4",
+      "source_video_name": "video_1X8BTMHvVm9DSVv96pxgtoofAk9DXUR0S",
+      "clip_index": 2,
+      "start_time": 192.56815914232436,
+      "duration": 30.51068969728871,
+      "end_time": 223.07884883961307
+    },
+    {
+      "source_video_hash": "81ef734c9b08989f43da2f908aa3edba",
+      "source_video_path": "temp_videos/1778667917/video_1X8BTMHvVm9DSVv96pxgtoofAk9DXUR0S.mp4",
+      "source_video_name": "video_1X8BTMHvVm9DSVv96pxgtoofAk9DXUR0S",
+      "clip_index": 3,
+      "start_time": 16.470245578847138,
+      "duration": 41.552308928905944,
+      "end_time": 58.022554507753085
+    },
+    {
+      "source_video_hash": "81ef734c9b08989f43da2f908aa3edba",
+      "source_video_path": "temp_videos/1778667917/video_1X8BTMHvVm9DSVv96pxgtoofAk9DXUR0S.mp4",
+      "source_video_name": "video_1X8BTMHvVm9DSVv96pxgtoofAk9DXUR0S",
+      "clip_index": 4,
+      "start_time": 64.5513035666965,
+      "duration": 36.441545568727854,
+      "end_time": 100.99284913542436
+    },
+    {
+      "source_video_hash": "81ef734c9b08989f43da2f908aa3edba",
+      "source_video_path": "temp_videos/1778667917/video_1X8BTMHvVm9DSVv96pxgtoofAk9DXUR0S.mp4",
+      "source_video_name": "video_1X8BTMHvVm9DSVv96pxgtoofAk9DXUR0S",
+      "clip_index": 5,
+      "start_time": 109.29034852319606,
+      "duration": 43.97126757530711,
+      "end_time": 153.26161609850317
+    },
+    {
+      "source_video_hash": "81ef734c9b08989f43da2f908aa3edba",
+      "source_video_path": "temp_videos/1778667917/video_1X8BTMHvVm9DSVv96pxgtoofAk9DXUR0S.mp4",
+      "source_video_name": "video_1X8BTMHvVm9DSVv96pxgtoofAk9DXUR0S",
+      "clip_index": 6,
+      "start_time": 144.67127073037798,
+      "duration": 49.26699598623214,
+      "end_time": 193.93826671661012
+    },
+    {
+      "source_video_hash": "81ef734c9b08989f43da2f908aa3edba",
+      "source_video_path": "temp_videos/1778667917/video_1X8BTMHvVm9DSVv96pxgtoofAk9DXUR0S.mp4",
+      "source_video_name": "video_1X8BTMHvVm9DSVv96pxgtoofAk9DXUR0S",
+      "clip_index": 7,
+      "start_time": 193.84033472816208,
+      "duration": 37.06970687947051,
+      "end_time": 230.9100416076326
     }
   ],
   "uploaded_clips": [],
