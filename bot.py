@@ -18,17 +18,13 @@ import gdown
 TEMP_DIR = "temp_videos"
 PROCESSED_DIR = "processed_clips"
 OUTPUT_DIR = "final_shorts"
-SHORT_DURATION_RANGE = (15, 55)
+SHORT_DURATION_RANGE = (15, 55)  # seconds
 VIDEOS_PER_DAY = 2
 
 # YouTube Shorts settings
-SHORTS_RESOLUTION = (1080, 1920)
-BACKGROUND_BLUR = True
-ADD_SUBTITLES = False  # Set to True if you want auto-captions
-ADD_WATERMARK = True
-ADD_PROGRESS_BAR = True
+SHORTS_RESOLUTION = (1080, 1920)  # 9:16 vertical
+BACKGROUND_BLUR = True  # Add blur to fill empty space
 
-CHANNEL_NAME = "Seattle PD Bodycam"
 CHANNEL_HANDLE = "@SeattlePDBodycam"
 
 # Create directories
@@ -120,7 +116,7 @@ def split_video_to_random_clips(video_path, source_index):
     return clips
 
 def convert_to_shorts_format(input_video, output_video, part_number, clip_duration):
-    """Convert ANY video to YouTube Shorts 9:16 with blurred background"""
+    """Convert ANY video to YouTube Shorts 9:16 with blurred background (NO MUSIC)"""
     width, height = get_video_resolution(input_video)
     if not width or not height:
         width, height = 1920, 1080
@@ -130,7 +126,7 @@ def convert_to_shorts_format(input_video, output_video, part_number, clip_durati
     scaled_width = int(width * scale_factor)
     scaled_height = int(height * scale_factor)
     
-    # Build complex filter for Shorts
+    # Build complex filter for Shorts (no music processing)
     if BACKGROUND_BLUR:
         filter_complex = (
             f"[0:v]scale={target_width}:{target_height},boxblur=luma_radius=min(h\\,w)/40:luma_power=3[bg];"
@@ -153,80 +149,39 @@ def convert_to_shorts_format(input_video, output_video, part_number, clip_durati
     
     try:
         subprocess.run(cmd, check=True, capture_output=True, text=True)
-        print(f"  ✅ Converted to Shorts (9:16)")
+        print(f"  ✅ Converted to Shorts (9:16) - Original audio kept")
         return True
     except subprocess.CalledProcessError as e:
         print(f"  ❌ Conversion failed")
         return False
 
-def add_copyright_free_music(video_path):
-    """Add copyright-free background music at low volume (15%)"""
-    music_dir = "copyright_free_music"
-    music_files = []
-    if os.path.exists(music_dir):
-        music_files = glob.glob(f"{music_dir}/*.mp3") + glob.glob(f"{music_dir}/*.wav") + glob.glob(f"{music_dir}/*.m4a")
-    
-    output_path = video_path.replace(".mp4", "_with_music.mp4")
-    
-    if music_files:
-        music = random.choice(music_files)
-        print(f"  🎵 Adding music: {Path(music).name}")
-        cmd = [
-            "ffmpeg", "-i", video_path, "-i", music,
-            "-filter_complex", "[0:a]volume=1.0[a];[1:a]volume=0.15[b];[a][b]amix=inputs=2:duration=first",
-            "-c:v", "copy", "-c:a", "aac", "-y", output_path
-        ]
-        try:
-            subprocess.run(cmd, check=True, capture_output=True)
-            os.remove(video_path)
-            print(f"  ✅ Copyright-free music added")
-            return output_path
-        except Exception as e:
-            print(f"  ⚠️ Could not add music: {e}")
-            return video_path
-    else:
-        print(f"  ⚠️ No music found in '{music_dir}/' - skipping")
-        return video_path
-
 def edit_for_youtube_shorts(clip_path, part_number):
-    """Complete editing pipeline for copyright-free Shorts"""
+    """Complete editing pipeline for Shorts (NO BACKGROUND MUSIC)"""
     print(f"\n  🎨 Editing Part #{part_number} for YouTube Shorts...")
     
     clip_duration = get_video_duration(clip_path)
-    temp_shorts = clip_path.replace(".mp4", "_temp.mp4")
     final_path = f"{OUTPUT_DIR}/shorts_part_{part_number}.mp4"
     
-    # Convert to 9:16 vertical format
-    if not convert_to_shorts_format(clip_path, temp_shorts, part_number, clip_duration):
+    # Convert to 9:16 vertical format (keeps original audio)
+    if not convert_to_shorts_format(clip_path, final_path, part_number, clip_duration):
         return clip_path
     
-    # Add copyright-free background music
-    with_music = add_copyright_free_music(temp_shorts)
-    
-    # Move to final location
-    if with_music != final_path:
-        os.rename(with_music, final_path)
-    
-    # Cleanup
-    if os.path.exists(temp_shorts) and temp_shorts != final_path:
-        os.remove(temp_shorts)
-    
-    print(f"  ✅ Shorts ready for upload")
+    print(f"  ✅ Shorts ready (original audio, no background music)")
     return final_path
 
 def generate_metadata(part_number):
-    """Generate SEO-friendly title, description, tags"""
+    """Generate SEO-friendly title, description, tags (NO AI NEEDED)"""
     title = f"🚨 Seattle PD Bodycam - PART #{part_number} #Shorts"
     description = f"""🔴 SEATTLE POLICE BODYCAM FOOTAGE - PART #{part_number}
 
 Real body camera footage from Seattle Police Department (SPD)
 
-⚠️ DISCLAIMER: For informational purposes only.
+⚠️ DISCLAIMER: This footage is for informational purposes only. All suspects are innocent until proven guilty.
 
 🔔 SUBSCRIBE for more bodycam content daily!
 
-#SeattlePolice #Bodycam #PoliceBodycam #SPD #RealPolice #Shorts"""
-    tags = ["Seattle Police", "Bodycam", "SPD", "Police Bodycam", "Seattle PD", "Real Police", "Law Enforcement", "Shorts"]
+#SeattlePolice #Bodycam #PoliceBodycam #SPD #RealPolice #Seattle #LawEnforcement #Shorts"""
+    tags = ["Seattle Police", "Bodycam", "SPD", "Police Bodycam", "Seattle PD", "Real Police", "Law Enforcement", "Seattle Washington", "Shorts"]
     return title, description, tags
 
 def get_authenticated_service():
@@ -267,7 +222,7 @@ def upload_to_youtube(video_path, title, description, tags):
 def main():
     print("\n" + "=" * 60)
     print("📱 SEATTLE PD YOUTUBE SHORTS BOT")
-    print("🎬 Format: 9:16 Vertical with Copyright-Free Music")
+    print("🎬 Format: 9:16 Vertical | Original Audio | No Background Music")
     print("=" * 60 + "\n")
     
     tracker = load_tracker()
@@ -326,12 +281,12 @@ def main():
         part_num = next_part + i
         print(f"\n📹 Part #{part_num}")
         
-        # Edit for Shorts (adds copyright-free music + vertical format)
+        # Edit for Shorts (converts to 9:16, keeps original audio)
         shorts_video = edit_for_youtube_shorts(remaining[i], part_num)
         
         # Generate metadata
         title, description, tags = generate_metadata(part_num)
-        print(f"   Title: {title[:50]}...")
+        print(f"   Title: {title}")
         
         # Upload
         video_id = upload_to_youtube(shorts_video, title, description, tags)
@@ -349,7 +304,7 @@ def main():
     print("\n" + "=" * 60)
     print(f"✅ Done! Uploaded {today_uploads} Short(s)")
     print(f"📊 Next Part: #{tracker['next_part_number']}")
-    print(f"📋 Remaining: {len(remaining) - today_uploads}")
+    print(f"📋 Remaining clips: {len(remaining) - today_uploads}")
     print("=" * 60)
 
 if __name__ == "__main__":
