@@ -1,4 +1,4 @@
-import os, json, subprocess
+import os, json, subprocess, gdown
 from pathlib import Path
 from datetime import datetime
 from googleapiclient.discovery import build
@@ -9,6 +9,7 @@ import pytz
 VIDEOS_DIR = Path("videos")
 CLIPS_DIR = Path("clips")
 QUEUE_FILE = Path("queue.json")
+DRIVE_LINKS_FILE = Path("drive_links.txt")
 SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
 PK_TZ = pytz.timezone("Asia/Karachi")
 POST_TIMES_PK = ["18:00", "03:00"] # 6PM PKT = 9AM EST, 3AM PKT = 6PM EST
@@ -16,6 +17,28 @@ POST_TIMES_PK = ["18:00", "03:00"] # 6PM PKT = 9AM EST, 3AM PKT = 6PM EST
 def get_youtube_service():
     creds = Credentials.from_authorized_user_file("token.json", SCOPES)
     return build("youtube", "v3", credentials=creds)
+
+def download_from_drive():
+    if not DRIVE_LINKS_FILE.exists():
+        return False
+    links = [l.strip() for l in DRIVE_LINKS_FILE.read_text().splitlines() if l.strip()]
+    if not links:
+        return False
+
+    VIDEOS_DIR.mkdir(exist_ok=True)
+    url = links[0]
+    print(f"Downloading from Google Drive: {url}")
+    output = VIDEOS_DIR / "downloaded_video.mp4"
+
+    try:
+        gdown.download(url, str(output), quiet=False, fuzzy=True)
+        # Remove link after successful download so we don't re-download
+        DRIVE_LINKS_FILE.write_text("\n".join(links[1:]))
+        print("Download complete")
+        return True
+    except Exception as e:
+        print(f"Drive download failed: {e}")
+        return False
 
 def edit_for_copyright(input_path, output_path):
     cmd = [
@@ -98,6 +121,10 @@ def main():
     CLIPS_DIR.mkdir(exist_ok=True)
     q = load_queue()
 
+    # Step 0: Download from Drive if link exists
+    download_from_drive()
+
+    # Step 1: Process any videos in videos/ folder
     for video_file in VIDEOS_DIR.glob("*.mp4"):
         if str(video_file) not in q["processed"]:
             print(f"Processing: {video_file.name}")
@@ -106,6 +133,7 @@ def main():
             save_queue(q)
             break
 
+    # Step 2: Post if it's time
     if should_post_now():
         yt = get_youtube_service()
         upload_next_clip(yt)
