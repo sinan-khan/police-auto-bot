@@ -13,6 +13,7 @@ from googleapiclient.http import MediaFileUpload
 from googleapiclient.errors import HttpError
 import gdown
 import hashlib
+import sys
 
 # ============= CONFIGURATION =============
 TEMP_DIR = "temp_videos"
@@ -33,20 +34,17 @@ QUEUE_FILE = "upload_queue.json"
 PROCESSED_VIDEOS_FILE = "processed_videos.json"
 
 def load_queue():
-    """Load the upload queue (persists across runs)"""
+    """Load the upload queue"""
     if os.path.exists(QUEUE_FILE):
         with open(QUEUE_FILE, "r") as f:
             queue = json.load(f)
-            # Ensure all required keys exist
             if "pending_clips" not in queue:
                 queue["pending_clips"] = []
             if "uploaded_clips" not in queue:
                 queue["uploaded_clips"] = []
             if "next_part_number" not in queue:
                 queue["next_part_number"] = 1
-            save_queue(queue)  # Save the fixed structure
             return queue
-    # Initialize with correct structure
     return {
         "pending_clips": [],
         "uploaded_clips": [],
@@ -58,7 +56,6 @@ def save_queue(queue):
         json.dump(queue, f, indent=2)
 
 def load_processed_videos():
-    """Track which source videos have already been processed into clips"""
     if os.path.exists(PROCESSED_VIDEOS_FILE):
         with open(PROCESSED_VIDEOS_FILE, "r") as f:
             data = json.load(f)
@@ -72,10 +69,8 @@ def save_processed_videos(processed_set):
         json.dump(list(processed_set), f, indent=2)
 
 def get_video_hash(video_path):
-    """Create a unique hash for a video file to avoid reprocessing"""
     try:
         with open(video_path, 'rb') as f:
-            # Read first 1MB and last 1MB for fast hashing
             f.seek(0)
             head = f.read(1024 * 1024)
             f.seek(-1024 * 1024, os.SEEK_END)
@@ -101,7 +96,6 @@ def get_video_resolution(video_path):
     return width, height
 
 def download_from_drive(link):
-    """Download videos from Google Drive"""
     print(f"📥 Downloading from: {link[:80]}...")
     temp_subdir = os.path.join(TEMP_DIR, str(int(datetime.now().timestamp())))
     Path(temp_subdir).mkdir(exist_ok=True)
@@ -130,7 +124,6 @@ def download_from_drive(link):
     return video_files
 
 def split_video_to_clips(video_path, video_hash):
-    """Split video into clips and return list of clip info"""
     duration = get_video_duration(video_path)
     print(f"  📹 Duration: {duration:.1f}s")
     
@@ -177,9 +170,7 @@ def split_video_to_clips(video_path, video_hash):
     return clips
 
 def generate_clip_file(clip_info, part_number):
-    """Generate the actual video file from clip info"""
     output_path = f"{PROCESSED_DIR}/clip_{part_number}.mp4"
-    
     cmd = [
         "ffmpeg", "-i", clip_info["source_video_path"],
         "-ss", str(clip_info["start_time"]),
@@ -188,7 +179,6 @@ def generate_clip_file(clip_info, part_number):
         "-avoid_negative_ts", "make_zero",
         "-y", output_path
     ]
-    
     try:
         subprocess.run(cmd, check=True, capture_output=True)
         return output_path
@@ -197,7 +187,6 @@ def generate_clip_file(clip_info, part_number):
         return None
 
 def convert_to_shorts_format(input_video, output_video, part_number, clip_duration):
-    """Convert to YouTube Shorts 9:16 format"""
     width, height = get_video_resolution(input_video)
     if not width or not height:
         width, height = 1920, 1080
@@ -241,7 +230,6 @@ def convert_to_shorts_format(input_video, output_video, part_number, clip_durati
         return False
 
 def generate_metadata(part_number):
-    """Generate SEO-friendly title, description, tags"""
     title = f"🚨 Seattle PD Bodycam - PART #{part_number} #Shorts"
     description = f"""🔴 SEATTLE POLICE BODYCAM FOOTAGE - PART #{part_number}
 
@@ -294,11 +282,10 @@ def upload_to_youtube(video_path, title, description, tags):
         print(f"  ❌ Failed: {e}")
         return None
 
-def process_new_videos():
-    """Check for new videos in drive_links.txt and add their clips to the queue"""
-    
+def download_only_mode():
+    """ONLY download new videos and create clips - NO uploads"""
     print("\n" + "=" * 60)
-    print("📋 STEP 1: Checking for new videos to process")
+    print("📥 DOWNLOAD MODE: Processing new videos (NO uploads)")
     print("=" * 60)
     
     queue = load_queue()
@@ -344,7 +331,7 @@ def process_new_videos():
                 queue["pending_clips"].append(clip)
             new_clips_added += len(clips)
             processed_videos.add(video_hash)
-            print(f"   ✅ Added {len(clips)} clips to upload queue")
+            print(f"   ✅ Added {len(clips)} clips to upload queue (will upload on schedule)")
         else:
             print(f"   ⚠️ No clips generated")
     
@@ -352,15 +339,16 @@ def process_new_videos():
     save_processed_videos(processed_videos)
     
     print(f"\n📊 Total clips in queue: {len(queue['pending_clips'])}")
-    print(f"📊 Already uploaded: {len(queue['uploaded_clips'])}")
+    print(f"📊 Clips waiting to upload: {len(queue['pending_clips'])}")
+    print(f"\n✅ DOWNLOAD MODE COMPLETE!")
+    print(f"📌 Next scheduled upload will start from Part #{queue['next_part_number']}")
     
     return new_clips_added > 0
 
-def upload_daily_videos():
-    """Upload today's videos from the queue (2 per day)"""
-    
+def upload_only_mode():
+    """ONLY upload from queue - NO downloading"""
     print("\n" + "=" * 60)
-    print("📤 STEP 2: Uploading today's scheduled videos")
+    print("📤 UPLOAD MODE: Uploading scheduled videos (NO downloads)")
     print("=" * 60)
     
     queue = load_queue()
@@ -426,16 +414,22 @@ def upload_daily_videos():
     return True
 
 def main():
+    # Check if this is a manual run (workflow_dispatch) or scheduled run
+    # GitHub Actions sets GITHUB_EVENT_NAME environment variable
+    event_name = os.getenv("GITHUB_EVENT_NAME", "")
+    
     print("\n" + "🎬" * 30)
-    print("SEATTLE PD YOUTUBE SHORTS BOT - PERSISTENT QUEUE SYSTEM")
+    print("SEATTLE PD YOUTUBE SHORTS BOT")
     print("🎬" * 30)
     
-    # Initialize queue files
-    load_queue()
-    load_processed_videos()
-    
-    process_new_videos()
-    upload_daily_videos()
+    if event_name == "workflow_dispatch":
+        # MANUAL RUN: Only download and clip, NO upload
+        print("\n🔧 MANUAL TRIGGER DETECTED: Download mode only")
+        download_only_mode()
+    else:
+        # SCHEDULED RUN: Only upload, NO download
+        print("\n⏰ SCHEDULED TRIGGER DETECTED: Upload mode only")
+        upload_only_mode()
     
     print("\n" + "=" * 60)
     print("✅ BOT FINISHED")
