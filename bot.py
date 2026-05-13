@@ -1,44 +1,24 @@
-import os, json, subprocess, gdown
+import os
+import subprocess
+import random
+import re
 from pathlib import Path
-from datetime import datetime
+from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
-from google.oauth2.credentials import Credentials
-import pytz
 
-VIDEOS_DIR = Path("videos")
-CLIPS_DIR = Path("clips")
-QUEUE_FILE = Path("queue.json")
-DRIVE_LINKS_FILE = Path("drive_links.txt")
+# Settings
+CLIP_DURATION = 59
+SPEED = 1.15
 SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
-PK_TZ = pytz.timezone("Asia/Karachi")
-POST_TIMES_PK = ["18:00", "03:00"] # 6PM PKT = 9AM EST, 3AM PKT = 6PM EST
 
-def get_youtube_service():
-    creds = Credentials.from_authorized_user_file("token.json", SCOPES)
-    return build("youtube", "v3", credentials=creds)
-
-def download_from_drive():
-    if not DRIVE_LINKS_FILE.exists():
-        return False
-    links = [l.strip() for l in DRIVE_LINKS_FILE.read_text().splitlines() if l.strip()]
-    if not links:
-        return False
-
-    VIDEOS_DIR.mkdir(exist_ok=True)
-    url = links[0]
-    print(f"Downloading from Google Drive: {url}")
-    output = VIDEOS_DIR / "downloaded_video.mp4"
-
-    try:
-        gdown.download(url, str(output), quiet=False, fuzzy=True)
-        # Remove link after successful download so we don't re-download
-        DRIVE_LINKS_FILE.write_text("\n".join(links[1:]))
-        print("Download complete")
-        return True
-    except Exception as e:
-        print(f"Drive download failed: {e}")
-        return False
+def get_duration(path):
+    result = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+         "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
+        capture_output=True, text=True
+    )
+    return float(result.stdout.strip())
 
 def edit_for_copyright(input_path, output_path, part_num):
     filters = (
@@ -46,109 +26,125 @@ def edit_for_copyright(input_path, output_path, part_num):
         "scale=1280:720:force_original_aspect_ratio=decrease,"
         "pad=1280:720:(ow-iw)/2:(oh-ih)/2,"
         "drawtext=text='Part\\#{}':fontcolor=white:fontsize=48:"
-        "box=1:boxcolor=black@0.5:boxborderw=10:x=50:y=50"
+        "box=1:boxcolor=black@0.5:boxborderw=10:x=50:y=50:x=(w-text_w)/2:y=h-100"
     ).format(part_num)
 
     cmd = [
         "ffmpeg", "-i", str(input_path),
         "-vf", filters,
-        "-af", "atempo=1.15",
+        "-af", f"atempo={SPEED}",
         "-c:v", "libx264", "-preset", "fast", "-crf", "23",
         "-c:a", "aac", "-b:a", "128k",
         "-y", str(output_path)
     ]
     subprocess.run(cmd, check=True)
 
-def split_and_edit(video_path):
-    CLIPS_DIR.mkdir(exist_ok=True)
-    temp_dir = Path("temp")
-    temp_dir.mkdir(exist_ok=True)
-
-    split_pattern = temp_dir / f"{video_path.stem}_temp_%03d.mp4"
-    subprocess.run([
-        "ffmpeg", "-i", str(video_path),
-        "-c", "copy", "-map", "0", "-segment_time", "59",
-        "-f", "segment", "-reset_timestamps", "1", str(split_pattern)
-    ], check=True)
-
-    for temp_clip in sorted(temp_dir.glob("*.mp4")):
-        final_clip = CLIPS_DIR / f"{video_path.stem}_edit_{temp_clip.stem[-3:]}.mp4"
-        part_num = int(temp_clip.stem[-3:]) + 1
-edit_for_copyright(temp_clip, final_clip, part_num)
+def split_and_edit(input_path, output_dir):
+    base = Path(input_path).stem
+    duration = get_duration(input_path)
+    segments = [(i, min(i+CLIP_DURATION, duration)) for i in range(0, int(duration), CLIP_DURATION)]
+    
+    output_dir.mkdir(exist_ok=True)
+    clips = []
+    
+    for i, (start, end) in enumerate(segments):
+        temp_clip = output_dir / f"{base}_temp_{i:03d}.mp4"
+        final_clip = output_dir / f"{base}_edit_{i:03d}.mp4"
+        
+        # Cut clip
+        subprocess.run([
+            "ffmpeg", "-y", "-ss", str(start), "-to", str(end),
+            "-i", input_path, "-c", "copy", str(temp_clip)
+        ], check=True)
+        
+        # Edit for copyright + add Part#
+        part_num = i + 1
+        edit_for_copyright(temp_clip, final_clip, part_num)
+        clips.append(final_clip)
         temp_clip.unlink()
+    
+    return clips
 
-    temp_dir.rmdir()
-    video_path.unlink()
+def generate_viral_title(base_title, part_num):
+    hooks = [
+        "You WON'T BELIEVE This {} 😱",
+        "This {} Changed Everything 🔥",
+        "Nobody Expected This {} Part#{}",
+        "Wait For It... {} Part#{} 😮",
+        "The CRAZIEST {} You'll See Today"
+    ]
+    hook = random.choice(hooks)
+    if "Part#{}" in hook:
+        title = hook.format(base_title, part_num)
+    else:
+        title = hook.format(base_title)
+    return title[:100]
 
-def generate_metadata(filename):
-    num = filename.split("_edit_")[-1].replace(".mp4","")
-    base = filename.split("_edit_")[0].replace("_"," ")
-    title = f"{base} Bodycam Part {num} | Police Footage"
-    desc = f"""Seattle PD bodycam footage for news & educational purposes.
-Full video source: Public records.
+def generate_description(base_title, part_num):
+    return f"""{base_title} - Part#{part_num}
 
-#police #bodycam #seattle #news"""
-    tags = ["police", "bodycam", "seattle pd", "cop", "news", "law enforcement"]
-    return title, desc, tags
+🔔 Subscribe for more! New parts daily at 6PM & 3AM PKT
+👍 Like if you enjoyed this part
+💬 Comment what you want to see next
 
-def load_queue():
-    if QUEUE_FILE.exists():
-        return json.loads(QUEUE_FILE.read_text())
-    return {"processed": [], "posted": []}
+#shorts #viral #fyp
+"""
 
-def save_queue(q):
-    QUEUE_FILE.write_text(json.dumps(q, indent=2))
+def generate_tags(base_title):
+    base_tags = ["shorts", "viral", "fyp", "trending"]
+    words = [w for w in base_title.split() if len(w) > 3]
+    return base_tags + words[:8]
 
-def should_post_now():
-    now_pk = datetime.now(PK_TZ)
-    return now_pk.strftime("%H:%M") in POST_TIMES_PK
-
-def upload_next_clip(youtube):
-    q = load_queue()
-    pending = [c for c in sorted(CLIPS_DIR.glob("*.mp4")) if str(c) not in q["posted"]]
-    if not pending:
-        print("Queue empty")
-        return
-    clip = pending[0]
-    title, desc, tags = generate_metadata(clip.name)
-    print(f"Uploading {clip.name}")
-    request = youtube.videos().insert(
-        part="snippet,status",
-        body={
-            "snippet": {"title": title, "description": desc, "tags": tags, "categoryId": "25"},
-            "status": {"privacyStatus": "public", "selfDeclaredMadeForKids": False}
+def upload_video(file_path, title, description, tags):
+    creds = Credentials.from_authorized_user_file("token.json", SCOPES)
+    youtube = build("youtube", "v3", credentials=creds)
+    
+    request_body = {
+        "snippet": {
+            "title": title,
+            "description": description,
+            "tags": tags,
+            "categoryId": "24"
         },
-        media_body=MediaFileUpload(str(clip))
-    )
-    response = request.execute()
-    print(f"Uploaded: https://youtube.com/watch?v={response['id']}")
-    q["posted"].append(str(clip))
-    save_queue(q)
-    clip.unlink()
+        "status": {"privacyStatus": "public"}
+    }
+    
+    media = MediaFileUpload(str(file_path), resumable=True)
+    response = youtube.videos().insert(
+        part="snippet,status",
+        body=request_body,
+        media_body=media
+    ).execute()
+    print(f"Uploaded: https://youtu.be/{response['id']}")
 
 def main():
-    VIDEOS_DIR.mkdir(exist_ok=True)
-    CLIPS_DIR.mkdir(exist_ok=True)
-    q = load_queue()
-
-    # Step 0: Download from Drive if link exists
-    download_from_drive()
-
-    # Step 1: Process any videos in videos/ folder
-    for video_file in VIDEOS_DIR.glob("*.mp4"):
-        if str(video_file) not in q["processed"]:
-            print(f"Processing: {video_file.name}")
-            split_and_edit(video_file)
-            q["processed"].append(str(video_file))
-            save_queue(q)
-            break
-
-    # Step 2: Post if it's time
-    if should_post_now():
-        yt = get_youtube_service()
-        upload_next_clip(yt)
-    else:
-        print(f"Not post time. Current PK: {datetime.now(PK_TZ).strftime('%H:%M')}")
+    Path("clips").mkdir(exist_ok=True)
+    Path("temp").mkdir(exist_ok=True)
+    
+    # Read link and title from drive_links.txt
+    with open("drive_links.txt") as f:
+        line = f.readline().strip()
+        if " | " in line:
+            link, base_title = line.split(" | ", 1)
+        else:
+            link = line
+            base_title = "Video"
+    
+    # Download video with gdown
+    input_file = "input.mp4"
+    print(f"Downloading {link}...")
+    subprocess.run(["gdown", link, "-O", input_file], check=True)
+    
+    # Split, edit, and upload
+    clips = split_and_edit(input_file, Path("clips"))
+    
+    for i, clip in enumerate(clips):
+        part_num = i + 1
+        title = generate_viral_title(base_title, part_num)
+        description = generate_description(base_title, part_num)
+        tags = generate_tags(base_title)
+        print(f"Uploading {title}...")
+        upload_video(clip, title, description, tags)
 
 if __name__ == "__main__":
     main()
