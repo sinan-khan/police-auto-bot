@@ -3,7 +3,6 @@ import json
 import subprocess
 import glob
 import random
-import re
 from datetime import datetime
 from pathlib import Path
 from google.oauth2.credentials import Credentials
@@ -13,35 +12,61 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from googleapiclient.errors import HttpError
 import gdown
+import hashlib
 
 # ============= CONFIGURATION =============
 TEMP_DIR = "temp_videos"
 PROCESSED_DIR = "processed_clips"
 OUTPUT_DIR = "final_shorts"
-SHORT_DURATION_RANGE = (15, 55)  # seconds
+SHORT_DURATION_RANGE = (15, 55)
 VIDEOS_PER_DAY = 2
-
-# YouTube Shorts settings
-SHORTS_RESOLUTION = (1080, 1920)  # 9:16 vertical
-BACKGROUND_BLUR = True  # Add blur to fill empty space
-
+SHORTS_RESOLUTION = (1080, 1920)
+BACKGROUND_BLUR = True
 CHANNEL_HANDLE = "@SeattlePDBodycam"
 
 # Create directories
 for d in [TEMP_DIR, PROCESSED_DIR, OUTPUT_DIR]:
     Path(d).mkdir(exist_ok=True)
 
-TRACKER_FILE = "queue.json"
+# Queue files
+QUEUE_FILE = "upload_queue.json"      # Main queue of all clips
+PROCESSED_VIDEOS_FILE = "processed_videos.json"  # Track which videos we've already processed
 
-def load_tracker():
-    if os.path.exists(TRACKER_FILE):
-        with open(TRACKER_FILE, "r") as f:
+def load_queue():
+    """Load the upload queue (persists across runs)"""
+    if os.path.exists(QUEUE_FILE):
+        with open(QUEUE_FILE, "r") as f:
             return json.load(f)
-    return {"next_part_number": 1, "uploaded_clips": [], "source_videos_processed": []}
+    return {
+        "pending_clips": [],      # List of clips waiting to be uploaded
+        "uploaded_clips": [],     # List of already uploaded clips with metadata
+        "next_part_number": 1     # Next part number to use
+    }
 
-def save_tracker(tracker):
-    with open(TRACKER_FILE, "w") as f:
-        json.dump(tracker, f, indent=2)
+def save_queue(queue):
+    with open(QUEUE_FILE, "w") as f:
+        json.dump(queue, f, indent=2)
+
+def load_processed_videos():
+    """Track which source videos have already been processed into clips"""
+    if os.path.exists(PROCESSED_VIDEOS_FILE):
+        with open(PROCESSED_VIDEOS_FILE, "r") as f:
+            return set(json.load(f))
+    return set()
+
+def save_processed_videos(processed_set):
+    with open(PROCESSED_VIDEOS_FILE, "w") as f:
+        json.dump(list(processed_set), f, indent=2)
+
+def get_video_hash(video_path):
+    """Create a unique hash for a video file to avoid reprocessing"""
+    with open(video_path, 'rb') as f:
+        # Read first 1MB and last 1MB for fast hashing
+        f.seek(0)
+        head = f.read(1024 * 1024)
+        f.seek(-1024 * 1024, os.SEEK_END)
+        tail = f.read(1024 * 1024)
+        return hashlib.md5(head + tail).hexdigest()
 
 def get_video_duration(video_path):
     cmd = ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", video_path]
@@ -78,45 +103,76 @@ def download_from_drive(link):
     print(f"✅ Downloaded {len(video_files)} video files")
     return video_files
 
-def split_video_to_random_clips(video_path, source_index):
+def split_video_to_clips(video_path, video_hash):
+    """Split video into clips and return list of clip paths"""
     duration = get_video_duration(video_path)
     print(f"  📹 Duration: {duration:.1f}s")
+    
     if duration < 15:
         print(f"  ⚠️ Too short, skipping")
         return []
-    max_clips = min(15, int(duration / 15))
-    num_clips = random.randint(2, min(8, max_clips))
+    
+    # Determine number of clips to make
+    max_clips = min(20, int(duration / 15))
+    num_clips = random.randint(3, min(10, max_clips))
+    
     clips = []
     used_ranges = []
-    base_name = Path(video_path).stem
-    source_name = f"{source_index}_{base_name[:30]}"
+    video_name = Path(video_path).stem[:40]
+    
     for i in range(num_clips):
         clip_duration = random.uniform(*SHORT_DURATION_RANGE)
         attempts = 0
-        while attempts < 20:
+        while attempts < 30:
             start_time = random.uniform(0, duration - clip_duration)
             overlap = False
             for used_start, used_end in used_ranges:
-                if abs(start_time - used_start) < clip_duration / 2:
+                if abs(start_time - used_start) < clip_duration / 1.5:
                     overlap = True
                     break
             if not overlap:
                 break
             attempts += 1
+        
         end_time = min(start_time + clip_duration, duration)
         used_ranges.append((start_time, end_time))
-        output_path = f"{PROCESSED_DIR}/clip_{source_name}_{i+1}.mp4"
-        cmd = ["ffmpeg", "-i", video_path, "-ss", str(start_time), "-t", str(clip_duration), "-c", "copy", "-avoid_negative_ts", "make_zero", "-y", output_path]
-        try:
-            subprocess.run(cmd, check=True, capture_output=True)
-            clips.append(output_path)
-            print(f"    ✂️  Clip {i+1}: {start_time:.1f}s-{end_time:.1f}s ({clip_duration:.1f}s)")
-        except subprocess.CalledProcessError as e:
-            print(f"    ❌ Error: {e}")
+        
+        # Store clip info (not actual file yet - we'll generate on demand)
+        clip_info = {
+            "source_video_hash": video_hash,
+            "source_video_name": video_name,
+            "clip_index": i + 1,
+            "start_time": start_time,
+            "duration": clip_duration,
+            "end_time": end_time
+        }
+        clips.append(clip_info)
+        print(f"    ✂️  Clip {i+1}: {start_time:.1f}s-{end_time:.1f}s ({clip_duration:.1f}s)")
+    
     return clips
 
+def generate_clip_file(clip_info, source_video_path, part_number):
+    """Generate the actual video file from clip info (when ready to upload)"""
+    output_path = f"{PROCESSED_DIR}/clip_{part_number}.mp4"
+    
+    cmd = [
+        "ffmpeg", "-i", source_video_path,
+        "-ss", str(clip_info["start_time"]),
+        "-t", str(clip_info["duration"]),
+        "-c", "copy",
+        "-avoid_negative_ts", "make_zero",
+        "-y", output_path
+    ]
+    
+    try:
+        subprocess.run(cmd, check=True, capture_output=True)
+        return output_path
+    except subprocess.CalledProcessError as e:
+        print(f"    ❌ Failed to generate clip: {e}")
+        return None
+
 def convert_to_shorts_format(input_video, output_video, part_number, clip_duration):
-    """Convert ANY video to YouTube Shorts 9:16 with blurred background (NO MUSIC)"""
+    """Convert to YouTube Shorts 9:16 format"""
     width, height = get_video_resolution(input_video)
     if not width or not height:
         width, height = 1920, 1080
@@ -126,7 +182,6 @@ def convert_to_shorts_format(input_video, output_video, part_number, clip_durati
     scaled_width = int(width * scale_factor)
     scaled_height = int(height * scale_factor)
     
-    # Build complex filter for Shorts (no music processing)
     if BACKGROUND_BLUR:
         filter_complex = (
             f"[0:v]scale={target_width}:{target_height},boxblur=luma_radius=min(h\\,w)/40:luma_power=3[bg];"
@@ -145,43 +200,33 @@ def convert_to_shorts_format(input_video, output_video, part_number, clip_durati
             f"drawtext=text='{CHANNEL_HANDLE}':fontcolor=white@0.6:fontsize=24:x=30:y=H-50"
         )
     
-    cmd = ["ffmpeg", "-i", input_video, "-vf", filter_complex, "-c:v", "libx264", "-preset", "fast", "-crf", "23", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", "-y", output_video]
+    cmd = [
+        "ffmpeg", "-i", input_video,
+        "-vf", filter_complex,
+        "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+        "-c:a", "aac", "-b:a", "128k",
+        "-movflags", "+faststart",
+        "-y", output_video
+    ]
     
     try:
         subprocess.run(cmd, check=True, capture_output=True, text=True)
-        print(f"  ✅ Converted to Shorts (9:16) - Original audio kept")
         return True
-    except subprocess.CalledProcessError as e:
-        print(f"  ❌ Conversion failed")
+    except subprocess.CalledProcessError:
         return False
 
-def edit_for_youtube_shorts(clip_path, part_number):
-    """Complete editing pipeline for Shorts (NO BACKGROUND MUSIC)"""
-    print(f"\n  🎨 Editing Part #{part_number} for YouTube Shorts...")
-    
-    clip_duration = get_video_duration(clip_path)
-    final_path = f"{OUTPUT_DIR}/shorts_part_{part_number}.mp4"
-    
-    # Convert to 9:16 vertical format (keeps original audio)
-    if not convert_to_shorts_format(clip_path, final_path, part_number, clip_duration):
-        return clip_path
-    
-    print(f"  ✅ Shorts ready (original audio, no background music)")
-    return final_path
-
 def generate_metadata(part_number):
-    """Generate SEO-friendly title, description, tags (NO AI NEEDED)"""
     title = f"🚨 Seattle PD Bodycam - PART #{part_number} #Shorts"
     description = f"""🔴 SEATTLE POLICE BODYCAM FOOTAGE - PART #{part_number}
 
 Real body camera footage from Seattle Police Department (SPD)
 
-⚠️ DISCLAIMER: This footage is for informational purposes only. All suspects are innocent until proven guilty.
+⚠️ DISCLAIMER: This footage is for informational purposes only.
 
 🔔 SUBSCRIBE for more bodycam content daily!
 
-#SeattlePolice #Bodycam #PoliceBodycam #SPD #RealPolice #Seattle #LawEnforcement #Shorts"""
-    tags = ["Seattle Police", "Bodycam", "SPD", "Police Bodycam", "Seattle PD", "Real Police", "Law Enforcement", "Seattle Washington", "Shorts"]
+#SeattlePolice #Bodycam #PoliceBodycam #SPD #RealPolice #Shorts"""
+    tags = ["Seattle Police", "Bodycam", "SPD", "Police Bodycam", "Seattle PD", "Real Police", "Law Enforcement", "Shorts"]
     return title, description, tags
 
 def get_authenticated_service():
@@ -194,7 +239,7 @@ def get_authenticated_service():
             creds.refresh(Request())
         else:
             if not os.path.exists("client_secrets.json"):
-                raise Exception("client_secrets.json not found! Add YT_CLIENT_SECRETS secret.")
+                raise Exception("client_secrets.json not found!")
             flow = InstalledAppFlow.from_client_secrets_file("client_secrets.json", SCOPES)
             creds = flow.run_local_server(port=0)
         with open("token.json", "w") as token:
@@ -219,15 +264,16 @@ def upload_to_youtube(video_path, title, description, tags):
         print(f"  ❌ Failed: {e}")
         return None
 
-def main():
-    print("\n" + "=" * 60)
-    print("📱 SEATTLE PD YOUTUBE SHORTS BOT")
-    print("🎬 Format: 9:16 Vertical | Original Audio | No Background Music")
-    print("=" * 60 + "\n")
+def process_new_videos():
+    """Check for new videos in drive_links.txt and add their clips to the queue"""
     
-    tracker = load_tracker()
-    next_part = tracker["next_part_number"]
-    print(f"📊 Next Part: #{next_part}")
+    print("\n" + "=" * 60)
+    print("📋 STEP 1: Checking for new videos to process")
+    print("=" * 60)
+    
+    # Load tracking data
+    queue = load_queue()
+    processed_videos = load_processed_videos()
     
     # Read drive links
     drive_links = []
@@ -237,74 +283,151 @@ def main():
     
     if not drive_links:
         print("❌ No links found in drive_links.txt")
-        return
+        return False
     
     print(f"📁 Found {len(drive_links)} Drive link(s)")
     
-    # Download all videos
-    all_videos = []
+    # Download new videos
+    all_new_videos = []
     for link in drive_links:
         videos = download_from_drive(link)
-        all_videos.extend(videos)
+        all_new_videos.extend(videos)
     
-    if not all_videos:
+    if not all_new_videos:
         print("❌ No videos downloaded")
-        return
+        return False
     
-    print(f"\n📦 Downloaded {len(all_videos)} video(s)")
+    print(f"\n📦 Downloaded {len(all_new_videos)} video(s)")
     
-    # Generate clips
-    all_clips = []
-    for idx, video in enumerate(all_videos, 1):
-        print(f"\n🎬 Processing video {idx}/{len(all_videos)}: {Path(video).name}")
-        clips = split_video_to_random_clips(video, idx)
-        all_clips.extend(clips)
+    # Process only NEW videos (not processed before)
+    new_clips_added = 0
     
-    print(f"\n🎯 Total clips generated: {len(all_clips)}")
+    for video_path in all_new_videos:
+        video_hash = get_video_hash(video_path)
+        
+        if video_hash in processed_videos:
+            print(f"\n⏭️  Skipping already processed: {Path(video_path).name}")
+            continue
+        
+        print(f"\n🎬 NEW VIDEO: {Path(video_path).name}")
+        
+        # Split into clips
+        clips = split_video_to_clips(video_path, video_hash)
+        
+        if clips:
+            # Add to queue
+            for clip in clips:
+                clip["source_video_path"] = video_path  # Store path for later generation
+                queue["pending_clips"].append(clip)
+            
+            new_clips_added += len(clips)
+            processed_videos.add(video_hash)
+            print(f"   ✅ Added {len(clips)} clips to upload queue")
+        else:
+            print(f"   ⚠️ No clips generated")
     
-    # Check queue
-    uploaded_count = len(tracker["uploaded_clips"])
-    remaining = all_clips[uploaded_count:]
+    # Save updated data
+    save_queue(queue)
+    save_processed_videos(processed_videos)
     
-    print(f"📋 Already uploaded: {uploaded_count}")
-    print(f"📋 In queue: {len(remaining)}")
+    print(f"\n📊 Total clips in queue: {len(queue['pending_clips'])}")
+    print(f"📊 Already uploaded: {len(queue['uploaded_clips'])}")
     
-    if not remaining:
-        print("🎉 All clips done! Add more videos to drive_links.txt")
-        return
+    return new_clips_added > 0
+
+def upload_daily_videos():
+    """Upload today's videos from the queue (2 per day)"""
     
-    # Upload today's videos
-    today_uploads = min(VIDEOS_PER_DAY, len(remaining))
+    print("\n" + "=" * 60)
+    print("📤 STEP 2: Uploading today's scheduled videos")
+    print("=" * 60)
+    
+    queue = load_queue()
+    
+    if not queue["pending_clips"]:
+        print("✅ No pending clips to upload!")
+        return False
+    
+    # Calculate next part number
+    next_part = queue["next_part_number"]
+    print(f"📊 Next Part number: #{next_part}")
+    print(f"📊 Pending clips: {len(queue['pending_clips'])}")
+    
+    # Upload today's videos (max VIDEOS_PER_DAY)
+    today_uploads = min(VIDEOS_PER_DAY, len(queue["pending_clips"]))
     print(f"\n🚀 Uploading {today_uploads} Short(s) today...")
     
     for i in range(today_uploads):
         part_num = next_part + i
-        print(f"\n📹 Part #{part_num}")
+        clip_info = queue["pending_clips"][i]
         
-        # Edit for Shorts (converts to 9:16, keeps original audio)
-        shorts_video = edit_for_youtube_shorts(remaining[i], part_num)
+        print(f"\n📹 Processing Part #{part_num}")
         
-        # Generate metadata
+        # Step 1: Generate the raw clip from source video
+        source_path = clip_info["source_video_path"]
+        if not os.path.exists(source_path):
+            print(f"  ❌ Source video missing: {source_path}")
+            continue
+        
+        raw_clip = generate_clip_file(clip_info, source_path, part_num)
+        if not raw_clip:
+            continue
+        
+        # Step 2: Convert to Shorts format
+        final_video = f"{OUTPUT_DIR}/shorts_part_{part_num}.mp4"
+        clip_duration = clip_info["duration"]
+        
+        if not convert_to_shorts_format(raw_clip, final_video, part_num, clip_duration):
+            continue
+        
+        # Step 3: Generate metadata
         title, description, tags = generate_metadata(part_num)
         print(f"   Title: {title}")
         
-        # Upload
-        video_id = upload_to_youtube(shorts_video, title, description, tags)
+        # Step 4: Upload
+        video_id = upload_to_youtube(final_video, title, description, tags)
         
         if video_id:
-            tracker["uploaded_clips"].append({
+            # Move from pending to uploaded
+            queue["uploaded_clips"].append({
                 "part_number": part_num,
                 "video_id": video_id,
+                "source_clip": clip_info,
                 "uploaded_at": datetime.now().isoformat()
             })
+            
+            # Cleanup temp files
+            if os.path.exists(raw_clip):
+                os.remove(raw_clip)
     
-    tracker["next_part_number"] = next_part + today_uploads
-    save_tracker(tracker)
+    # Remove uploaded clips from pending queue
+    queue["pending_clips"] = queue["pending_clips"][today_uploads:]
+    queue["next_part_number"] = next_part + today_uploads
+    
+    # Save updated queue
+    save_queue(queue)
     
     print("\n" + "=" * 60)
-    print(f"✅ Done! Uploaded {today_uploads} Short(s)")
-    print(f"📊 Next Part: #{tracker['next_part_number']}")
-    print(f"📋 Remaining clips: {len(remaining) - today_uploads}")
+    print(f"✅ Uploaded {today_uploads} Short(s)")
+    print(f"📊 Next Part: #{queue['next_part_number']}")
+    print(f"📊 Remaining in queue: {len(queue['pending_clips'])}")
+    print("=" * 60)
+    
+    return True
+
+def main():
+    print("\n" + "🎬" * 30)
+    print("SEATTLE PD YOUTUBE SHORTS BOT - PERSISTENT QUEUE SYSTEM")
+    print("🎬" * 30)
+    
+    # Step 1: Process any new videos (adds clips to queue)
+    process_new_videos()
+    
+    # Step 2: Upload today's scheduled videos (2 per day)
+    upload_daily_videos()
+    
+    print("\n" + "=" * 60)
+    print("✅ BOT FINISHED")
     print("=" * 60)
 
 if __name__ == "__main__":
