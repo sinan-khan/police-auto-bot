@@ -1,18 +1,33 @@
-name: Upload Shorts
+name: Upload YouTube Shorts
 on:
   schedule:
-    - cron: "0 0 * * *"   # 5:00 AM PKT (assuming UTC+5)
-    - cron: "0 3 * * *"   # 8:00 AM PKT (assuming UTC+5)
+    - cron: "0 5 * * *"   # 10:00 AM PKT
+    - cron: "0 11 * * *"  # 4:00 PM PKT
   workflow_dispatch:
 
 jobs:
   upload:
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install gdown google-api-python-client google-auth-httplib2 google-auth-oauthlib
-      - run: echo '${{ secrets.YT_TOKEN }}' > token.json
-      - run: python bot.py
+      
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          ffmpeg -version
+      
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      
+      - name: Setup YouTube credentials
+        run: echo '${{ secrets.YT_CLIENT_SECRETS }}' > client_secrets.json
+      
+      - name: Run bot
+        run: python bot.py
