@@ -1,7 +1,7 @@
 name: Download Videos
 
 on:
-  workflow_dispatch:  # Manual run only
+  workflow_dispatch:
 
 jobs:
   download:
@@ -21,15 +21,28 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         sudo apt-get update
-        sudo apt-get install -y ffmpeg
+        sudo apt-get install -y ffmpeg yt-dlp
     
     - name: Create directories
       run: |
         mkdir -p temp_videos
         mkdir -p output_clips
     
+    - name: Create empty queue.json if not exists
+      run: |
+        if [ ! -f queue.json ]; then
+          echo '{"pending_clips": [], "uploaded_clips": [], "next_part_number": 1}' > queue.json
+          echo "✅ Created empty queue.json"
+        else
+          echo "✅ queue.json already exists"
+        fi
+    
     - name: Download videos and create clips
-      run: python bot.py --mode download-only
+      run: python bot.py --mode download
+      env:
+        YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+        YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+        YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
     
     - name: Save videos to cache
       uses: actions/cache/save@v3
@@ -43,6 +56,23 @@ jobs:
       run: |
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
-        git add queue.json
-        git diff --quiet && git diff --staged --quiet || git commit -m "Update queue after download [skip ci]"
-        git push
+        
+        if [ -f queue.json ]; then
+          git add queue.json
+          git diff --quiet && git diff --staged --quiet || git commit -m "Update queue after download [skip ci]"
+          git push
+          echo "✅ queue.json committed"
+        else
+          echo "⚠️ queue.json not found - skipping commit"
+        fi
+    
+    - name: Show queue status
+      run: |
+        echo "========== QUEUE STATUS =========="
+        if [ -f queue.json ]; then
+          echo "File exists. Contents:"
+          cat queue.json
+        else
+          echo "❌ queue.json not found"
+        fi
+        echo "=================================="
