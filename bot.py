@@ -206,30 +206,32 @@ def process_downloads():
     print(f"📊 Next part number: {queue['next_part_number']}")
 
 def get_video_urls():
-    """Get video URLs from user input or environment"""
+    """Get video URLs from file or environment (NO manual input for GitHub Actions)"""
+    
     # Method 1: Environment variable
     urls_env = os.environ.get("VIDEO_URLS", "")
     if urls_env:
+        print("📥 Using URLs from VIDEO_URLS environment variable")
         return [url.strip() for url in urls_env.split(",") if url.strip()]
     
-    # Method 2: From file
+    # Method 2: From file (RECOMMENDED for GitHub Actions)
     urls_file = "video_urls.txt"
     if os.path.exists(urls_file):
         with open(urls_file, 'r') as f:
             urls = [line.strip() for line in f if line.strip() and not line.startswith("#")]
             if urls:
+                print(f"📥 Loaded {len(urls)} URL(s) from {urls_file}")
                 return urls
+            else:
+                print(f"⚠️ {urls_file} exists but has no valid URLs")
     
-    # Method 3: Command line input (for manual runs)
-    print("\n📝 Enter YouTube video URLs (one per line, empty line to finish):")
-    urls = []
-    while True:
-        url = input().strip()
-        if not url:
-            break
-        urls.append(url)
-    
-    return urls
+    # If no URLs found, show error and exit (don't wait for input)
+    print("❌ ERROR: No video URLs found!")
+    print("Please create a 'video_urls.txt' file with one YouTube URL per line")
+    print("Example:")
+    print("  https://www.youtube.com/watch?v=VIDEO_ID_1")
+    print("  https://www.youtube.com/watch?v=VIDEO_ID_2")
+    sys.exit(1)  # Exit instead of waiting for input
 
 def create_clip_video(clip_info, output_path):
     """Create a clip video using ffmpeg"""
