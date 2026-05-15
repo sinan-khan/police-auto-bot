@@ -10,6 +10,7 @@ import time
 import argparse
 import subprocess
 import sys
+import random
 from datetime import datetime
 from pathlib import Path
 
@@ -34,7 +35,7 @@ CONFIG = {
     "videos_per_download": 3,  # Number of videos to download per run
     "clips_per_video": 10,      # Number of clips to extract per video
     "min_clip_duration": 15,    # Minimum clip length in seconds
-    "max_clip_duration": 60,    # Maximum clip length in seconds
+    "max_clip_duration": 55,    # Maximum clip length in seconds
     "output_dir": "temp_videos",
     "queue_file": "queue.json"
 }
@@ -60,31 +61,43 @@ def save_queue(queue):
     with open(CONFIG["queue_file"], 'w') as f:
         json.dump(queue, f, indent=2)
 
-def download_video(youtube_url, output_path):
-    """Download a video using yt-dlp"""
-    print(f"📥 Downloading: {youtube_url}")
+def download_video(url, output_path):
+    """Download a video using yt-dlp (supports YouTube and Google Drive)"""
+    print(f"📥 Downloading: {url}")
     
-    # Generate random filename if not provided
-    if not output_path:
-        import hashlib
-        hash_id = hashlib.md5(youtube_url.encode()).hexdigest()[:16]
-        output_path = os.path.join(CONFIG["output_dir"], f"video_{hash_id}.mp4")
+    # Create directory if it doesn't exist
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
     
-    # yt-dlp command
-    cmd = [
-        "yt-dlp",
-        "-f", "best[height<=720]",  # Max 720p to save space
-        "-o", output_path,
-        "--no-playlist",
-        "--quiet",
-        "--no-warnings",
-        youtube_url
-    ]
+    # Handle Google Drive links
+    if "drive.google.com" in url:
+        # Extract file ID from Google Drive URL
+        if "/file/d/" in url:
+            file_id = url.split("/file/d/")[1].split("/")[0]
+        elif "id=" in url:
+            file_id = url.split("id=")[1].split("&")[0]
+        else:
+            print(f"❌ Could not extract file ID from Google Drive URL: {url}")
+            return None
+        
+        # Use gdown for Google Drive (more reliable)
+        cmd = ["gdown", f"https://drive.google.com/uc?id={file_id}", "-O", output_path]
+    else:
+        # Use yt-dlp for YouTube
+        cmd = [
+            "yt-dlp",
+            "-f", "best[height<=720]",  # Max 720p to save space
+            "-o", output_path,
+            "--no-playlist",
+            "--quiet",
+            "--no-warnings",
+            url
+        ]
     
     try:
         result = subprocess.run(cmd, capture_output=True, text=True)
-        if result.returncode == 0 and os.path.exists(output_path):
-            print(f"✅ Downloaded: {output_path}")
+        if result.returncode == 0 and os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+            file_size = os.path.getsize(output_path) / (1024 * 1024)
+            print(f"✅ Downloaded: {output_path} ({file_size:.1f} MB)")
             return output_path
         else:
             print(f"❌ Download failed: {result.stderr}")
@@ -113,7 +126,7 @@ def get_video_duration(video_path):
 
 def extract_clips(video_path, num_clips=10):
     """
-    Extract interesting clips from video
+    Extract interesting clips from video with RANDOM durations (15-55 seconds)
     Returns list of clip info dicts
     """
     duration = get_video_duration(video_path)
@@ -123,25 +136,95 @@ def extract_clips(video_path, num_clips=10):
     
     print(f"📹 Video duration: {duration:.2f} seconds")
     
-    # Simple clip extraction - can be enhanced with motion detection or audio analysis
     clips = []
-    segment_duration = duration / (num_clips + 1)
+    used_positions = []
+    max_attempts = num_clips * 3
+    attempts = 0
     
-    for i in range(num_clips):
-        start_time = (i + 0.5) * segment_duration  # Start in middle of each segment
-        clip_duration = min(CONFIG["max_clip_duration"], duration - start_time)
+    while len(clips) < num_clips and attempts < max_attempts:
+        # Random duration between 15 and 55 seconds
+        clip_duration = random.randint(15, 55)
         
-        if clip_duration < CONFIG["min_clip_duration"]:
+        # Random start time (leave 5 seconds padding from start and end)
+        max_start = duration - clip_duration - 5
+        if max_start < 5:
+            attempts += 1
             continue
+            
+        start_time = random.uniform(5, max_start)
+        end_time = start_time + clip_duration
         
-        clips.append({
-            "start_time": start_time,
-            "duration": clip_duration,
-            "end_time": start_time + clip_duration
-        })
+        # Check if this clip overlaps too much with existing clips (minimum 15 second gap)
+        overlap = False
+        for used_start, used_end in used_positions:
+            if not (end_time < used_start - 15 or start_time > used_end + 15):
+                overlap = True
+                break
+        
+        if not overlap:
+            clips.append({
+                "start_time": start_time,
+                "duration": clip_duration,
+                "end_time": end_time
+            })
+            used_positions.append((start_time, end_time))
+        
+        attempts += 1
     
+    # If we couldn't get enough clips, reduce the requirement
+    if len(clips) < num_clips and len(clips) > 0:
+        print(f"⚠️ Only generated {len(clips)} clips (requested {num_clips}) due to video length")
+    elif len(clips) == 0:
+        print(f"❌ Could not generate any clips from this video")
+        return []
+    
+    # Sort clips by start time
+    clips.sort(key=lambda x: x["start_time"])
+    
+    # Print duration summary
+    durations = [c["duration"] for c in clips]
     print(f"✂️ Generated {len(clips)} clips from video")
+    print(f"   Duration range: {min(durations):.0f}s - {max(durations):.0f}s")
+    print(f"   Average: {sum(durations)/len(durations):.0f}s")
+    
     return clips
+
+def get_video_urls():
+    """Get video URLs from file or environment (NO manual input for GitHub Actions)"""
+    
+    # Method 1: Environment variable
+    urls_env = os.environ.get("VIDEO_URLS", "")
+    if urls_env:
+        print("📥 Using URLs from VIDEO_URLS environment variable")
+        urls = [url.strip() for url in urls_env.split(",") if url.strip()]
+        if urls:
+            return urls
+        else:
+            print("⚠️ VIDEO_URLS env var exists but no valid URLs")
+    
+    # Method 2: From file (RECOMMENDED for GitHub Actions)
+    urls_file = "video_urls.txt"
+    if os.path.exists(urls_file):
+        with open(urls_file, 'r') as f:
+            urls = []
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    urls.append(line)
+            if urls:
+                print(f"📥 Loaded {len(urls)} URL(s) from {urls_file}")
+                return urls
+            else:
+                print(f"⚠️ {urls_file} exists but has no valid URLs (lines starting with # are ignored)")
+    
+    # If no URLs found, show error and exit (don't wait for input)
+    print("\n❌ ERROR: No video URLs found!")
+    print("Please create a 'video_urls.txt' file in the repository root with one YouTube/Drive URL per line")
+    print("\nExample video_urls.txt:")
+    print("  https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+    print("  https://drive.google.com/file/d/FILE_ID/view")
+    print("  # This is a comment - lines starting with # are ignored")
+    sys.exit(1)
 
 def process_downloads():
     """Main download function - gets videos and creates clips"""
@@ -152,7 +235,7 @@ def process_downloads():
     setup_directories()
     queue = load_queue()
     
-    # Get video URLs from user or config
+    # Get video URLs
     video_urls = get_video_urls()
     
     if not video_urls:
@@ -166,7 +249,7 @@ def process_downloads():
         
         # Generate unique hash for this video
         import hashlib
-        video_hash = hashlib.md5(url.encode()).hexdigest()
+        video_hash = hashlib.md5(url.encode()).hexdigest()[:32]
         
         # Create folder for this video's clips
         video_folder = os.path.join(CONFIG["output_dir"], video_hash)
@@ -176,11 +259,11 @@ def process_downloads():
         video_path = os.path.join(video_folder, f"source_{video_hash}.mp4")
         downloaded_path = download_video(url, video_path)
         
-        if not downloaded_path or not os.path.exists(downloaded_path):
+        if not downloaded_path or not os.path.exists(downloaded_path) or os.path.getsize(downloaded_path) == 0:
             print(f"❌ Failed to download: {url}")
             continue
         
-        # Extract clips
+        # Extract clips with random durations
         clips = extract_clips(downloaded_path, CONFIG["clips_per_video"])
         
         for idx, clip in enumerate(clips):
@@ -205,34 +288,6 @@ def process_downloads():
     print(f"📊 Total pending clips: {len(queue['pending_clips'])}")
     print(f"📊 Next part number: {queue['next_part_number']}")
 
-def get_video_urls():
-    """Get video URLs from file or environment (NO manual input for GitHub Actions)"""
-    
-    # Method 1: Environment variable
-    urls_env = os.environ.get("VIDEO_URLS", "")
-    if urls_env:
-        print("📥 Using URLs from VIDEO_URLS environment variable")
-        return [url.strip() for url in urls_env.split(",") if url.strip()]
-    
-    # Method 2: From file (RECOMMENDED for GitHub Actions)
-    urls_file = "video_urls.txt"
-    if os.path.exists(urls_file):
-        with open(urls_file, 'r') as f:
-            urls = [line.strip() for line in f if line.strip() and not line.startswith("#")]
-            if urls:
-                print(f"📥 Loaded {len(urls)} URL(s) from {urls_file}")
-                return urls
-            else:
-                print(f"⚠️ {urls_file} exists but has no valid URLs")
-    
-    # If no URLs found, show error and exit (don't wait for input)
-    print("❌ ERROR: No video URLs found!")
-    print("Please create a 'video_urls.txt' file with one YouTube URL per line")
-    print("Example:")
-    print("  https://www.youtube.com/watch?v=VIDEO_ID_1")
-    print("  https://www.youtube.com/watch?v=VIDEO_ID_2")
-    sys.exit(1)  # Exit instead of waiting for input
-
 def create_clip_video(clip_info, output_path):
     """Create a clip video using ffmpeg"""
     source = clip_info["source_video_path"]
@@ -252,7 +307,7 @@ def create_clip_video(clip_info, output_path):
     ]
     
     try:
-        subprocess.run(cmd, capture_output=True, text=True, check=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
         return True
     except subprocess.CalledProcessError as e:
         print(f"❌ FFmpeg error: {e.stderr}")
@@ -308,6 +363,7 @@ def upload_to_youtube(video_path, title, description, tags=None):
             }
         }
         
+        # For shorts, ensure vertical aspect ratio
         media = MediaFileUpload(video_path, chunksize=-1, resumable=True)
         
         request = youtube.videos().insert(
@@ -354,6 +410,7 @@ def upload_clips(max_uploads=None):
         clip = pending[i]
         
         print(f"\n📹 Processing clip #{i+1}")
+        print(f"   Duration: {clip['duration']:.0f} seconds")
         
         # Check if source video exists
         if not os.path.exists(clip["source_video_path"]):
@@ -372,17 +429,19 @@ def upload_clips(max_uploads=None):
             failed += 1
             continue
         
-        # Generate title and description
+        # Generate title and description with duration info
         part_num = queue["next_part_number"]
         title = f"Seattle Police Bodycam - Part #{part_num}"
         description = f"""Seattle Police Department body camera footage.
 
 Part #{part_num} of our ongoing series showing police interactions.
 
+📹 Clip duration: {clip['duration']:.0f} seconds
+
 ⚠️ Disclaimer: This footage is for educational purposes.
-#SeattlePD #Bodycam #PoliceFootage"""
+#SeattlePD #Bodycam #PoliceFootage #Shorts"""
         
-        tags = ["SeattlePD", "Bodycam", "Police", "Washington"]
+        tags = ["SeattlePD", "Bodycam", "Police", "Washington", "Shorts"]
         
         # Upload to YouTube
         print(f"📤 Uploading to YouTube...")
@@ -397,6 +456,7 @@ Part #{part_num} of our ongoing series showing police interactions.
         # Clean up clip file
         try:
             os.remove(clip_path)
+            print(f"🗑️ Cleaned up: {clip_path}")
         except:
             pass
     
@@ -421,12 +481,12 @@ def main():
         "--mode", 
         choices=["download", "upload", "full", "download-only", "upload-only"],
         default="full",
-        help="Run mode: download, upload, or full (both)"
+        help="Run mode: download, upload, full, download-only, or upload-only"
     )
     parser.add_argument(
         "--limit", 
         type=int,
-        help="Max videos to upload (upload mode only)"
+        help="Max videos to upload (upload/upload-only mode only)"
     )
     
     args = parser.parse_args()
@@ -435,10 +495,11 @@ def main():
     print("SEATTLE PD YOUTUBE SHORTS BOT")
     print("🎬"*15)
     
-    if args.mode in ["download", "full"]:
+    # Handle both naming conventions
+    if args.mode in ["download", "full", "download-only"]:
         process_downloads()
     
-    if args.mode in ["upload", "full"]:
+    if args.mode in ["upload", "full", "upload-only"]:
         upload_clips(max_uploads=args.limit)
     
     print("\n" + "="*60)
