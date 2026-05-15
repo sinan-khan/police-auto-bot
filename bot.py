@@ -417,7 +417,7 @@ def main():
     parser = argparse.ArgumentParser(description="Seattle PD YouTube Shorts Bot")
     parser.add_argument(
         "--mode", 
-        choices=["download", "upload", "full"],
+        choices=["download", "upload", "full", "download-only", "upload-only"],
         default="full",
         help="Run mode: download, upload, or full (both)"
     )
