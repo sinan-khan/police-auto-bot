@@ -1,4 +1,4 @@
-name: Download Videos
+name: Download & Clip Videos
 
 on:
   workflow_dispatch:
@@ -6,74 +6,32 @@ on:
 jobs:
   download:
     runs-on: ubuntu-latest
-    
+    timeout-minutes: 120
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Setup Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.10'
-    
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install gdown  # Add this line
-        sudo apt-get update
-        sudo apt-get install -y ffmpeg yt-dlp
-    
-    - name: Create directories
-      run: |
-        mkdir -p temp_videos
-        mkdir -p output_clips
-    
-    - name: Create empty queue.json if not exists
-      run: |
-        if [ ! -f queue.json ]; then
-          echo '{"pending_clips": [], "uploaded_clips": [], "next_part_number": 1}' > queue.json
-          echo "✅ Created empty queue.json"
-        else
-          echo "✅ queue.json already exists"
-        fi
-    
-    - name: Download videos and create clips
-      run: python bot.py --mode download
-      env:
-        YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
-        YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
-        YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
-    
-    - name: Save videos to cache
-      uses: actions/cache/save@v3
-      with:
-        path: |
-          temp_videos/
-          queue.json
-        key: video-cache-${{ github.run_id }}
-    
-    - name: Commit queue.json to repo
-      run: |
-        git config user.name "github-actions[bot]"
-        git config user.email "github-actions[bot]@users.noreply.github.com"
-        
-        if [ -f queue.json ]; then
-          git add queue.json
-          git diff --quiet && git diff --staged --quiet || git commit -m "Update queue after download [skip ci]"
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+      
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      
+      - name: Run download bot
+        run: python download_bot.py   # ← Changed from bot.py
+      
+      - name: Commit and push queue files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git pull origin main --rebase || true
+          git add upload_queue.json processed_videos.json 2>/dev/null || true
+          git diff --staged --quiet || git commit -m "Update queue files [skip ci]"
           git push
-          echo "✅ queue.json committed"
-        else
-          echo "⚠️ queue.json not found - skipping commit"
-        fi
-    
-    - name: Show queue status
-      run: |
-        echo "========== QUEUE STATUS =========="
-        if [ -f queue.json ]; then
-          echo "File exists. Contents:"
-          cat queue.json
-        else
-          echo "❌ queue.json not found"
-        fi
-        echo "=================================="
