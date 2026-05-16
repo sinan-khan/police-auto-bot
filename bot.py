@@ -480,9 +480,13 @@ def main():
     # Check if this is a manual run or scheduled run
     event_name = os.getenv("GITHUB_EVENT_NAME", "")
     
-    if event_name == "workflow_dispatch":
-        print("\n🔧 MANUAL TRIGGER DETECTED: Download mode only")
-        download_only_mode()
+    # TEMPORARY - Force upload mode for testing
+upload_only_mode()
+
+# if event_name == "workflow_dispatch":
+#     download_only_mode()
+# else:
+#     upload_only_mode()
     else:
         print("\n⏰ SCHEDULED TRIGGER DETECTED: Upload mode only")
         upload_only_mode()
