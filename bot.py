@@ -19,14 +19,14 @@ import sys
 TEMP_DIR = "temp_videos"
 PROCESSED_DIR = "processed_clips"
 OUTPUT_DIR = "final_shorts"
-OUTPUT_CLIPS_DIR = "output_clips"  # ADDED - This was missing!
+OUTPUT_CLIPS_DIR = "output_clips"
 SHORT_DURATION_RANGE = (15, 55)
-VIDEOS_PER_DAY = 1  # 1 video per scheduled run (2 total per day with 2 schedules)
+VIDEOS_PER_DAY = 1
 SHORTS_RESOLUTION = (1080, 1920)
 BACKGROUND_BLUR = True
 CHANNEL_HANDLE = "@SeattlePDBodycam"
 
-# Create ALL directories
+# Create directories
 for d in [TEMP_DIR, PROCESSED_DIR, OUTPUT_DIR, OUTPUT_CLIPS_DIR]:
     Path(d).mkdir(exist_ok=True)
     print(f"✅ Directory ready: {d}")
@@ -36,7 +36,6 @@ QUEUE_FILE = "upload_queue.json"
 PROCESSED_VIDEOS_FILE = "processed_videos.json"
 
 def load_queue():
-    """Load the upload queue"""
     if os.path.exists(QUEUE_FILE):
         with open(QUEUE_FILE, "r") as f:
             queue = json.load(f)
@@ -126,7 +125,6 @@ def download_from_drive(link):
     return video_files
 
 def split_video_to_clips(video_path, video_hash, drive_link):
-    """Split video into clips and return list of clip info"""
     duration = get_video_duration(video_path)
     print(f"  📹 Duration: {duration:.1f}s")
     
@@ -174,10 +172,7 @@ def split_video_to_clips(video_path, video_hash, drive_link):
     return clips
 
 def generate_clip_file(clip_info, part_number):
-    """Generate the actual video file from clip info"""
-    # Ensure output_clips directory exists
     os.makedirs(OUTPUT_CLIPS_DIR, exist_ok=True)
-    
     output_path = os.path.join(OUTPUT_CLIPS_DIR, f"clip_{part_number}.mp4")
     
     cmd = [
@@ -198,7 +193,6 @@ def generate_clip_file(clip_info, part_number):
         return None
 
 def convert_to_shorts_format(input_video, output_video, part_number, clip_duration):
-    """Convert to YouTube Shorts 9:16 format"""
     width, height = get_video_resolution(input_video)
     if not width or not height:
         width, height = 1920, 1080
@@ -244,7 +238,6 @@ def convert_to_shorts_format(input_video, output_video, part_number, clip_durati
         return False
 
 def generate_metadata(part_number):
-    """Generate SEO-friendly title, description, tags"""
     title = f"🚨 Seattle PD Bodycam - PART #{part_number} #Shorts"
     description = f"""🔴 SEATTLE POLICE BODYCAM FOOTAGE - PART #{part_number}
 
@@ -277,7 +270,6 @@ def get_authenticated_service():
     return build("youtube", "v3", credentials=creds)
 
 def upload_to_youtube(video_path, title, description, tags):
-    """Upload video to YouTube with verification"""
     if not os.path.exists(video_path):
         print(f"  ❌ Video file not found: {video_path}")
         return None
@@ -325,7 +317,6 @@ def upload_to_youtube(video_path, title, description, tags):
         return None
 
 def download_only_mode():
-    """ONLY download new videos and create clips - NO uploads"""
     print("\n" + "=" * 60)
     print("📥 DOWNLOAD MODE: Processing new videos (NO uploads)")
     print("=" * 60)
@@ -365,10 +356,7 @@ def download_only_mode():
             continue
         
         print(f"\n🎬 NEW VIDEO: {Path(video_path).name}")
-        
-        # Find which drive link this came from
         drive_link = next((link for link in drive_links if video_path in str(link)), drive_links[0])
-        
         clips = split_video_to_clips(video_path, video_hash, drive_link)
         
         if clips:
@@ -389,7 +377,6 @@ def download_only_mode():
     return new_clips_added > 0
 
 def upload_only_mode():
-    """ONLY upload from queue - NO downloading"""
     print("\n" + "=" * 60)
     print("📤 UPLOAD MODE: Uploading scheduled videos (NO downloads)")
     print("=" * 60)
@@ -453,13 +440,11 @@ def upload_only_mode():
                 "uploaded_at": datetime.now().isoformat()
             })
             
-            # Cleanup
             if os.path.exists(raw_clip):
                 os.remove(raw_clip)
             if os.path.exists(final_video):
                 os.remove(final_video)
     
-    # Remove uploaded clips from queue
     queue["pending_clips"] = queue["pending_clips"][today_uploads:]
     queue["next_part_number"] = next_part + today_uploads
     save_queue(queue)
@@ -477,19 +462,18 @@ def main():
     print("SEATTLE PD YOUTUBE SHORTS BOT")
     print("🎬" * 30)
     
-    # Check if this is a manual run or scheduled run
     event_name = os.getenv("GITHUB_EVENT_NAME", "")
     
-    # TEMPORARY - Force upload mode for testing
-upload_only_mode()
-
-# if event_name == "workflow_dispatch":
-#     download_only_mode()
-# else:
-#     upload_only_mode()
-    else:
-        print("\n⏰ SCHEDULED TRIGGER DETECTED: Upload mode only")
-        upload_only_mode()
+    # TEMPORARY: Force upload mode to test
+    print("\n🔧 FORCE UPLOAD MODE FOR TESTING")
+    upload_only_mode()
+    
+    # if event_name == "workflow_dispatch":
+    #     print("\n🔧 MANUAL TRIGGER DETECTED: Download mode only")
+    #     download_only_mode()
+    # else:
+    #     print("\n⏰ SCHEDULED TRIGGER DETECTED: Upload mode only")
+    #     upload_only_mode()
     
     print("\n" + "=" * 60)
     print("✅ BOT FINISHED")
