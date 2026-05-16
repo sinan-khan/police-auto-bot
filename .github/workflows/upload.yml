@@ -2,8 +2,9 @@ name: Upload YouTube Shorts
 
 on:
   schedule:
-    - cron: "0 1 * * *"   # 6:00 AM PKT (adjust as needed)
-    - cron: "0 13 * * *"  # 9:00 PM PKT (adjust as needed)
+    - cron: "0 1 * * *"   # 6:00 AM PKT
+    - cron: "0 13 * * *"  # 9:00 PM PKT
+  workflow_dispatch:  # ← ADD THIS LINE to enable manual run
 
 jobs:
   upload:
@@ -30,7 +31,7 @@ jobs:
         run: echo '${{ secrets.YT_CLIENT_SECRETS }}' > client_secrets.json
       
       - name: Run upload bot
-        run: python upload_bot.py   # ← Changed from bot.py
+        run: python upload_bot.py
       
       - name: Commit and push queue files
         run: |
