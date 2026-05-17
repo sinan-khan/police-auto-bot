@@ -12,7 +12,7 @@ on:
     # SECOND UPLOAD: US Lunch/Afternoon (12:00 PM EST)
     # ============================================
     # 12:00 PM EST = 9:00 PM PKT (same day)
-    - cron: "0 21 * * *"  # Runs daily at 9:00 PM PKT
+    - cron: "0 22 * * *"  # Runs daily at 9:00 PM PKT
 
   workflow_dispatch:  # Manual trigger for testing
 
