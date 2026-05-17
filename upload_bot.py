@@ -2,6 +2,7 @@ import os
 import json
 import subprocess
 import glob
+import time
 from datetime import datetime
 from pathlib import Path
 from google.oauth2.credentials import Credentials
@@ -93,7 +94,7 @@ def generate_clip_file(clip_info, part_number):
         subprocess.run(cmd, check=True, capture_output=True)
         print(f"    ✅ Clip created")
         return output_path
-    except subprocess.CalledProcessError as e:
+    except subprocess.CalledProcessError:
         print(f"    ❌ Failed to generate clip")
         return None
 
@@ -139,11 +140,12 @@ def convert_to_shorts_format(input_video, output_video, part_number, clip_durati
         print(f"    ✅ Converted to Shorts (9:16)")
         return True
     except subprocess.CalledProcessError:
+        print(f"    ❌ Conversion failed")
         return False
 
 def generate_metadata(part_number):
-    title = f"🚨 Seattle PD Bodycam - PART #{part_number} #Shorts"
-    description = f"""🔴 SEATTLE POLICE BODYCAM FOOTAGE - PART #{part_number}
+    title = f"Seattle PD Bodycam - PART #{part_number} #Shorts"
+    description = f"""SEATTLE POLICE BODYCAM FOOTAGE - PART #{part_number}
 
 Real body camera footage from Seattle Police Department (SPD)
 
@@ -156,38 +158,61 @@ Real body camera footage from Seattle Police Department (SPD)
     return title, description, tags
 
 def get_authenticated_service():
+    """Authenticate with YouTube API using token.json and client_secrets.json"""
     SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
     creds = None
+    
+    # Load existing token if available
     if os.path.exists("token.json"):
+        print("  📂 Loading existing token.json...")
         creds = Credentials.from_authorized_user_file("token.json", SCOPES)
+        print(f"  ✓ Token loaded. Valid: {creds.valid}")
+    
+    # If no valid credentials, try to refresh or create new
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
+            print("  🔄 Token expired, refreshing...")
             creds.refresh(Request())
+            print("  ✓ Token refreshed")
         else:
-            if not os.path.exists("client_secrets.json"):
-                print("⚠️ client_secrets.json not found!")
-                return None
-            flow = InstalledAppFlow.from_client_secrets_file("client_secrets.json", SCOPES)
-            creds = flow.run_local_server(port=0)
-        with open("token.json", "w") as token:
-            token.write(creds.to_json())
+            print("  🔑 No valid token found. This should not happen in GitHub Actions.")
+            print("  ⚠️ Make sure YT_TOKEN_JSON secret is correctly set.")
+            return None
+    
+    # Save refreshed token
+    with open("token.json", "w") as token:
+        token.write(creds.to_json())
+    
     return build("youtube", "v3", credentials=creds)
 
 def upload_to_youtube(video_path, title, description, tags):
     if not os.path.exists(video_path):
-        print(f"  ❌ Video file not found")
+        print(f"  ❌ Video file not found: {video_path}")
         return None
     
     file_size = os.path.getsize(video_path)
     print(f"  📹 File size: {file_size/1024/1024:.2f} MB")
     
+    if file_size < 10000:
+        print(f"  ⚠️ File too small ({file_size} bytes) - may be corrupt")
+        return None
+    
     youtube = get_authenticated_service()
     if not youtube:
+        print("  ❌ YouTube authentication failed")
         return None
     
     body = {
-        "snippet": {"title": title[:100], "description": description[:5000], "tags": tags[:500], "categoryId": "22"},
-        "status": {"privacyStatus": "public", "selfDeclaredMadeForKids": False}
+        "snippet": {
+            "title": title[:100],
+            "description": description[:5000],
+            "tags": tags[:500],
+            "categoryId": "22"
+        },
+        "status": {
+            "privacyStatus": "public",
+            "selfDeclaredMadeForKids": False
+        }
     }
     
     media = MediaFileUpload(video_path, chunksize=1024*1024, resumable=True)
@@ -197,16 +222,35 @@ def upload_to_youtube(video_path, title, description, tags):
         request = youtube.videos().insert(part="snippet,status", body=body, media_body=media)
         response = request.execute()
         video_id = response.get('id')
+        
         if video_id:
-            print(f"  ✅ Uploaded! https://youtube.com/shorts/{video_id}")
+            print(f"  ✅ Upload command successful! Video ID: {video_id}")
+            print(f"  🔗 https://youtube.com/shorts/{video_id}")
+            
+            # Verify the upload
+            time.sleep(3)
+            verify_request = youtube.videos().list(part="status", id=video_id)
+            verify_response = verify_request.execute()
+            if verify_response['items']:
+                status = verify_response['items'][0].get('status', {})
+                print(f"  📊 Upload status: {status.get('uploadStatus', 'unknown')}")
+                print(f"  📊 Privacy: {status.get('privacyStatus', 'unknown')}")
+            else:
+                print(f"  ⚠️ Video not immediately found (may take a moment)")
+            
             return video_id
+        else:
+            print(f"  ❌ No video ID in response")
+            return None
     except HttpError as e:
         print(f"  ❌ YouTube API Error: {e}")
-    return None
+        if hasattr(e, 'content'):
+            print(f"  📝 Details: {e.content}")
+        return None
 
 def main():
     print("\n" + "=" * 60)
-    print("📤 UPLOAD BOT - Upload videos from queue (NO downloads)")
+    print("📤 UPLOAD BOT - Upload videos from queue")
     print("=" * 60)
     
     queue = load_queue()
