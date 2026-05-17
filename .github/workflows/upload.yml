@@ -2,9 +2,19 @@ name: Upload YouTube Shorts
 
 on:
   schedule:
-    - cron: "0 1 * * *"   # 6:00 AM PKT
-    - cron: "0 13 * * *"  # 9:00 PM PKT
-  workflow_dispatch:  # ← ADD THIS LINE to enable manual run
+    # ============================================
+    # FIRST UPLOAD: US Evening Peak (8:00 PM EST)
+    # ============================================
+    # 8:00 PM EST = 5:00 AM PKT (next day)
+    - cron: "0 5 * * *"   # Runs daily at 5:00 AM PKT
+    
+    # ============================================
+    # SECOND UPLOAD: US Lunch/Afternoon (12:00 PM EST)
+    # ============================================
+    # 12:00 PM EST = 9:00 PM PKT (same day)
+    - cron: "0 21 * * *"  # Runs daily at 9:00 PM PKT
+
+  workflow_dispatch:  # Manual trigger for testing
 
 jobs:
   upload:
@@ -28,7 +38,10 @@ jobs:
         run: pip install -r requirements.txt
       
       - name: Setup YouTube credentials
-        run: echo '${{ secrets.YT_CLIENT_SECRETS }}' > client_secrets.json
+        run: |
+          echo '${{ secrets.YT_CLIENT_SECRETS }}' > client_secrets.json
+          echo '${{ secrets.YT_TOKEN_JSON }}' > token.json
+          echo "✅ Credentials created"
       
       - name: Run upload bot
         run: python upload_bot.py
