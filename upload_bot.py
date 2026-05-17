@@ -13,10 +13,13 @@ import gdown
 
 # ============= CONFIGURATION =============
 OUTPUT_CLIPS_DIR = "output_clips"
+PROCESSED_DIR = "shorts_ready"
 VIDEOS_PER_DAY = 1
 QUEUE_FILE = "upload_queue.json"
 
-Path(OUTPUT_CLIPS_DIR).mkdir(exist_ok=True)
+# Create directories
+for d in [OUTPUT_CLIPS_DIR, PROCESSED_DIR]:
+    Path(d).mkdir(exist_ok=True)
 
 def load_queue():
     if os.path.exists(QUEUE_FILE):
@@ -70,6 +73,51 @@ def generate_clip_file(clip_info, part_number):
     except subprocess.CalledProcessError:
         print(f"    ❌ Failed to create clip")
         return None
+
+def convert_to_shorts(input_video, output_video):
+    """Convert any video to YouTube Shorts format (9:16 vertical)"""
+    
+    # Get video info
+    cmd = ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "default=noprint_wrappers=1", input_video]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    
+    width = height = None
+    for line in result.stdout.split('\n'):
+        if 'width=' in line:
+            width = int(line.split('=')[1])
+        if 'height=' in line:
+            height = int(line.split('=')[1])
+    
+    if not width or not height:
+        width, height = 1920, 1080
+    
+    print(f"    📐 Original: {width}x{height}")
+    
+    # Target Shorts size
+    target_w, target_h = 1080, 1920
+    
+    # Complex filter: Scale to fit, then pad to 9:16
+    filter_complex = (
+        f"scale={target_w}:{target_h}:force_original_aspect_ratio=1,"
+        f"pad={target_w}:{target_h}:(ow-iw)/2:(oh-ih)/2:black"
+    )
+    
+    cmd = [
+        "ffmpeg", "-i", input_video,
+        "-vf", filter_complex,
+        "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+        "-c:a", "aac", "-b:a", "128k",
+        "-movflags", "+faststart",
+        "-y", output_video
+    ]
+    
+    try:
+        subprocess.run(cmd, check=True, capture_output=True, text=True)
+        print(f"    ✅ Converted to Shorts (9:16)")
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"    ❌ Conversion failed: {e.stderr if e.stderr else str(e)}")
+        return False
 
 def generate_metadata(part_number):
     title = f"Seattle PD Bodycam - PART #{part_number} #Shorts"
@@ -135,7 +183,7 @@ def upload_to_youtube(video_path, title, description, tags):
         video_id = response.get('id')
         
         if video_id:
-            print(f"  ✅ UPLOADED! Video ID: {video_id}")
+            print(f"  ✅ UPLOADED! Shorts ID: {video_id}")
             print(f"  🔗 https://youtube.com/shorts/{video_id}")
             return video_id
         else:
@@ -147,7 +195,7 @@ def upload_to_youtube(video_path, title, description, tags):
 
 def main():
     print("\n" + "=" * 60)
-    print("📤 UPLOAD BOT - Upload videos from queue")
+    print("📤 UPLOAD BOT - YouTube Shorts Uploader")
     print("=" * 60)
     
     queue = load_queue()
@@ -181,14 +229,21 @@ def main():
             else:
                 continue
         
-        video_file = generate_clip_file(clip_info, part_num)
-        if not video_file:
+        # Create raw clip
+        raw_clip = generate_clip_file(clip_info, part_num)
+        if not raw_clip:
+            continue
+        
+        # Convert to Shorts format (9:16)
+        shorts_video = os.path.join(PROCESSED_DIR, f"shorts_{part_num}.mp4")
+        if not convert_to_shorts(raw_clip, shorts_video):
+            print(f"  ⚠️ Skipping upload - conversion failed")
             continue
         
         title, description, tags = generate_metadata(part_num)
         print(f"   Title: {title}")
         
-        video_id = upload_to_youtube(video_file, title, description, tags)
+        video_id = upload_to_youtube(shorts_video, title, description, tags)
         
         if video_id:
             queue["uploaded_clips"].append({
@@ -196,6 +251,11 @@ def main():
                 "video_id": video_id,
                 "uploaded_at": datetime.now().isoformat()
             })
+            
+            # Cleanup
+            for f in [raw_clip, shorts_video]:
+                if os.path.exists(f):
+                    os.remove(f)
     
     queue["pending_clips"] = queue["pending_clips"][today_uploads:]
     queue["next_part_number"] = next_part + today_uploads
