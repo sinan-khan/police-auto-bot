@@ -5,16 +5,6 @@
       "source_video_path": "temp_videos/1778926022/video_1AoGJqfLbUJ6KaHPEyR6UrjEN9LIkjbsm.mp4",
       "drive_link": "https://drive.google.com/file/d/1-hvvcq5ELq2egpjPUbqElFHy03UzFfTi/view?usp=drive_link",
       "source_video_name": "video_1AoGJqfLbUJ6KaHPEyR6UrjEN9LIkjbsm",
-      "clip_index": 1,
-      "start_time": 342.10845753229336,
-      "duration": 15.477788245090597,
-      "end_time": 357.58624577738397
-    },
-    {
-      "source_video_hash": "3857227456344f688a3ffda6cbb61c38",
-      "source_video_path": "temp_videos/1778926022/video_1AoGJqfLbUJ6KaHPEyR6UrjEN9LIkjbsm.mp4",
-      "drive_link": "https://drive.google.com/file/d/1-hvvcq5ELq2egpjPUbqElFHy03UzFfTi/view?usp=drive_link",
-      "source_video_name": "video_1AoGJqfLbUJ6KaHPEyR6UrjEN9LIkjbsm",
       "clip_index": 2,
       "start_time": 609.9682341268353,
       "duration": 18.80684507802341,
@@ -146,7 +136,12 @@
       "part_number": 8,
       "video_id": "AdqkkzwXb6o",
       "uploaded_at": "2026-05-19T11:44:54.905537"
+    },
+    {
+      "part_number": 9,
+      "video_id": "BpCpkQH3Le8",
+      "uploaded_at": "2026-05-19T21:08:22.117015"
     }
   ],
-  "next_part_number": 9
+  "next_part_number": 10
 }
