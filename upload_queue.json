@@ -1,16 +1,6 @@
 {
   "pending_clips": [
     {
-      "source_video_hash": "3857227456344f688a3ffda6cbb61c38",
-      "source_video_path": "temp_videos/1778926022/video_1AoGJqfLbUJ6KaHPEyR6UrjEN9LIkjbsm.mp4",
-      "drive_link": "https://drive.google.com/file/d/1-hvvcq5ELq2egpjPUbqElFHy03UzFfTi/view?usp=drive_link",
-      "source_video_name": "video_1AoGJqfLbUJ6KaHPEyR6UrjEN9LIkjbsm",
-      "clip_index": 7,
-      "start_time": 186.28060215963268,
-      "duration": 24.007898106418992,
-      "end_time": 210.28850026605167
-    },
-    {
       "source_video_hash": "81ef734c9b08989f43da2f908aa3edba",
       "source_video_path": "temp_videos/1778926025/video_1X8BTMHvVm9DSVv96pxgtoofAk9DXUR0S.mp4",
       "drive_link": "https://drive.google.com/file/d/1-hvvcq5ELq2egpjPUbqElFHy03UzFfTi/view?usp=drive_link",
@@ -116,7 +106,12 @@
       "part_number": 14,
       "video_id": "1369N7WUnQo",
       "uploaded_at": "2026-05-22T10:39:46.423947"
+    },
+    {
+      "part_number": 15,
+      "video_id": "HfSFrF_hTK0",
+      "uploaded_at": "2026-05-22T20:56:29.164907"
     }
   ],
-  "next_part_number": 15
+  "next_part_number": 16
 }
