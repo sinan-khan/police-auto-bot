@@ -120,8 +120,8 @@ def convert_to_shorts(input_video, output_video):
         return False
 
 def generate_metadata(part_number):
-    title = f"Seattle PD Bodycam - PART #{part_number} #Shorts"
-    description = f"""SEATTLE POLICE BODYCAM FOOTAGE - PART #{part_number}
+    title = f"USA Police Bodycam - PART #{part_number} #Shorts"
+    description = f"""USA Police BODYCAM FOOTAGE - PART #{part_number}
 
 Real body camera footage from Seattle Police Department (SPD)
 
