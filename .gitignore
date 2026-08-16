@@ -1,0 +1,18 @@
+# Credentials — NEVER commit these
+token.json
+client_secrets.json
+cookies.txt
+*.cookies.txt
+*_cookies.txt
+.env
+
+# Local working directories
+temp_videos/
+temp_download/
+shorts_ready/
+output_clips/
+
+# Misc
+__pycache__/
+*.pyc
+.DS_Store
