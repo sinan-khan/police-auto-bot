@@ -1,10 +1,6 @@
 {
   "pending_clips": [
     {
-      "asset_name": "clip_a6c27452b7_1.mp4",
-      "video_hash": "a6c27452b787e393f8df74b74ee03a93"
-    },
-    {
       "asset_name": "clip_a6c27452b7_2.mp4",
       "video_hash": "a6c27452b787e393f8df74b74ee03a93"
     },
@@ -53,6 +49,12 @@
       "video_hash": "80970cc42573ab2eb622ebd815608055"
     }
   ],
-  "uploaded_clips": [],
-  "next_part_number": 19
+  "uploaded_clips": [
+    {
+      "part_number": 19,
+      "video_id": "Re2NK4E6EJM",
+      "uploaded_at": "2026-08-16T21:54:56.169177"
+    }
+  ],
+  "next_part_number": 20
 }
