@@ -3,6 +3,9 @@ name: Download & Clip Videos
 on:
   workflow_dispatch:
 
+permissions:
+  contents: write   # needed to create/upload assets to the clip-queue release
+
 jobs:
   download:
     runs-on: ubuntu-latest
@@ -10,28 +13,30 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      
+
       - name: Install FFmpeg
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg
-      
+
       - name: Install dependencies
         run: pip install -r requirements.txt
-      
+
       - name: Run download bot
-        run: python download_bot.py   # ← Changed from bot.py
-      
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python download_bot.py
+
       - name: Commit and push queue files
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git pull origin main --rebase || true
-          git add upload_queue.json processed_videos.json 2>/dev/null || true
+          git add upload_queue.json processed_videos.json
           git diff --staged --quiet || git commit -m "Update queue files [skip ci]"
           git push
