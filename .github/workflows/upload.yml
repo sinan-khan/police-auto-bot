@@ -2,55 +2,47 @@ name: Upload YouTube Shorts
 
 on:
   schedule:
-    # ============================================
-    # FIRST UPLOAD: 5:00 AM PKT
-    # ============================================
     # 5:00 AM PKT = 0:00 UTC
-    - cron: "0 0 * * *"   # Runs daily at 5:00 AM PKT
-    
-    # ============================================
-    # SECOND UPLOAD: 9:00 PM PKT
-    # ============================================
+    - cron: "0 0 * * *"
     # 9:00 PM PKT = 16:00 UTC
-    - cron: "0 16 * * *"  # Runs daily at 9:00 PM PKT
+    - cron: "0 16 * * *"
 
   workflow_dispatch:
+
+permissions:
+  contents: write   # needed to download/delete assets on the clip-queue release
 
 jobs:
   upload:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 60
 
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      
-      - name: Install FFmpeg
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg
-      
+
       - name: Install dependencies
         run: pip install -r requirements.txt
-      
+
       - name: Setup YouTube credentials
         run: |
-          echo '${{ secrets.YT_CLIENT_SECRETS }}' > client_secrets.json
           echo '${{ secrets.YT_TOKEN_JSON }}' > token.json
           echo "✅ Credentials created"
-      
+
       - name: Run upload bot
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python upload_bot.py
-      
-      - name: Commit and push queue files
+
+      - name: Commit and push queue file
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git pull origin main --rebase || true
-          git add upload_queue.json 2>/dev/null || true
+          git add upload_queue.json
           git diff --staged --quiet || git commit -m "Update queue files [skip ci]"
           git push
