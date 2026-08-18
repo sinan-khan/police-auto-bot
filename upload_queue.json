@@ -1,10 +1,6 @@
 {
   "pending_clips": [
     {
-      "asset_name": "clip_a6c27452b7_5.mp4",
-      "video_hash": "a6c27452b787e393f8df74b74ee03a93"
-    },
-    {
       "asset_name": "clip_80970cc425_1.mp4",
       "video_hash": "80970cc42573ab2eb622ebd815608055"
     },
@@ -57,7 +53,12 @@
       "part_number": 22,
       "video_id": "CX31a-u0xek",
       "uploaded_at": "2026-08-18T01:10:15.679330"
+    },
+    {
+      "part_number": 23,
+      "video_id": "SLZdlA9Q-wM",
+      "uploaded_at": "2026-08-18T16:31:31.331950"
     }
   ],
-  "next_part_number": 23
+  "next_part_number": 24
 }
