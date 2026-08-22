@@ -1,10 +1,5 @@
 {
-  "pending_clips": [
-    {
-      "asset_name": "clip_80970cc425_8.mp4",
-      "video_hash": "80970cc42573ab2eb622ebd815608055"
-    }
-  ],
+  "pending_clips": [],
   "uploaded_clips": [
     {
       "part_number": 19,
@@ -65,7 +60,12 @@
       "part_number": 30,
       "video_id": "ZRWFX6kSJ7A",
       "uploaded_at": "2026-08-22T01:10:27.857799"
+    },
+    {
+      "part_number": 31,
+      "video_id": "9ozaxQkSBLY",
+      "uploaded_at": "2026-08-22T16:24:15.579241"
     }
   ],
-  "next_part_number": 31
+  "next_part_number": 32
 }
